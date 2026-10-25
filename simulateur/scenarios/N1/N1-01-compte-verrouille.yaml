@@ -1,0 +1,212 @@
+schema: scenario/1
+id: N1-01
+titre: Compte verrouillé après trop de tentatives
+niveau: N1
+temps_cible: 8m
+environnement: vellane
+horloge: 2026-11-02T08:47:00+01:00
+competences: [verrouillage, verification_identite, homonymes]
+
+resume: >
+  Léa Bernard (Achats, Paris) rentre de congés et a verrouillé son compte en
+  se trompant cinq fois de mot de passe. Cas simple : vérifier l'identité,
+  ouvrir le bon compte (un homonyme existe à Lyon), déverrouiller, faire
+  tester, sans réinitialiser le mot de passe qu'elle connaît.
+cause_racine: >
+  Cinq saisies erronées entre 08:39 et 08:41 depuis PC-PAR-0187, touche
+  Verr. Maj activée. Seuil de verrouillage du domaine : 5 tentatives.
+
+tickets:
+  INC0031101:
+    ouvert: -3m
+    demandeur: lbernard
+    poste: PC-PAR-0187
+    canal: telephone
+    priorite: P3
+    objet: Impossible d'ouvrir ma session
+    description: |
+      Bonjour, je rentre de deux semaines de congés et Windows me dit que mon
+      compte est verrouillé. J'ai dû me tromper de mot de passe plusieurs
+      fois. Pouvez-vous m'aider ? Léa Bernard, 4e étage.
+    reponses:
+      depuis_quand: Ce matin en arrivant, vers 8 h 40.
+      message_exact: "« Le compte référencé est actuellement verrouillé et vous ne pourrez peut-être pas vous y connecter. »"
+      changement_recent: Non, je n'ai pas changé mon mot de passe. Je l'ai un peu oublié pendant les vacances, c'est tout.
+      autre_poste: Non, seulement mon poste.
+      appareils_mobiles: Je n'ai pas mes mails sur mon téléphone.
+      deja_essaye: J'ai réessayé plusieurs fois... Ah, le voyant Verr. Maj est allumé, c'est peut-être pour ça.
+      collegues: Mes collègues se connectent sans problème.
+      materiel: C'est le PC-PAR-0187, c'est écrit sur l'étiquette.
+      localisation: Au siège, au 4e, service Achats.
+      par_defaut: Je ne sais pas trop, je ne suis pas très douée en informatique.
+    verification_identite:
+      matricule: V01187
+      manager: tmoreau
+    retours:
+      reessayer_connexion:
+        - si: [{ chemin: utilisateurs.lbernard.verrouillage.verrouille, egal: true }]
+          message: Toujours le même message, le compte est verrouillé.
+        - message: Ça y est, ma session s'ouvre. Merci beaucoup !
+          effets:
+            - authentification: { compte: lbernard, depuis: PC-PAR-0187, mdp: actuel }
+
+monde:
+  utilisateurs:
+    lbernard:
+      verrouillage: { verrouille: true, depuis: -6m, dc: DC-PAR-02 }
+      mauvais_mdp:
+        DC-PAR-02: { compteur: 5, dernier: -6m }
+        DC-PAR-01: { compteur: 5, dernier: -6m }
+      derniere_connexion: { DC-PAR-02: -17j }
+    mrobin:
+      # Autre compte verrouillé du domaine, sans rapport (ticket traité par
+      # un collègue) : il apparaît dans Search-ADAccount -LockedOut.
+      verrouillage: { verrouille: true, depuis: -49m, dc: DC-LYO-01 }
+  controleurs:
+    DC-PAR-02:
+      journaux:
+        - evenement: securite/4771
+          t: -8m
+          repeter: { nombre: 5, intervalle: 30s }
+          donnees: { compte: lbernard, ip_client: 10.10.4.88, port: 50112, code: "0x18" }
+        - evenement: securite/4740
+          t: -6m
+          donnees: { compte: lbernard, appelant: PC-PAR-0187 }
+    DC-PAR-01:
+      journaux:
+        - evenement: securite/4740
+          ref: verrouillage_pdc
+          t: -6m
+          donnees: { compte: lbernard, appelant: PC-PAR-0187 }
+
+indices:
+  identite_verifiee:
+    description: Identité de l'appelante vérifiée (rappel au numéro de l'annuaire, matricule ou manager).
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: ticket.verifier_identite, cible: INC0031101 }
+  bon_compte:
+    description: Le compte est lbernard (Léa Bernard, Achats, Paris), pas lbernard2 (Louis Bernard, Logistique, Lyon).
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: ad.utilisateur.lire, cible: lbernard }
+      - { action: ad.utilisateur.rechercher, parametres: { filtre: Bernard } }
+  compte_verrouille:
+    description: Compte activé mais verrouillé depuis 08:41, 5 tentatives erronées.
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: ad.utilisateur.lire, cible: lbernard }
+  mdp_valide:
+    description: "Mot de passe changé il y a 41 jours, non expiré : aucune réinitialisation n'est nécessaire."
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: ad.utilisateur.lire, cible: lbernard }
+  verr_maj:
+    description: L'utilisatrice avait la touche Verr. Maj activée.
+    categorie: diagnostic
+    points: 0
+    revele_par:
+      - { question: deja_essaye, ticket: INC0031101 }
+
+pieges:
+  reinitialisation_inutile:
+    description: Réinitialiser le mot de passe alors que l'utilisatrice le connaît.
+    declencheur: { action: ad.utilisateur.reinitialiser_mdp, cible: lbernard }
+    penalite: -10
+    retour: >
+      Le compte était seulement verrouillé : le mot de passe n'était ni oublié
+      ni expiré. Une réinitialisation impose un nouveau mot de passe, casse
+      les connexions enregistrées et fait circuler un mot de passe provisoire
+      sans raison. Déverrouiller suffisait.
+  mauvais_homonyme:
+    description: Agir sur le compte de Louis Bernard (Lyon) au lieu de celui de Léa Bernard.
+    declencheur:
+      action: [ad.utilisateur.deverrouiller, ad.utilisateur.reinitialiser_mdp, ad.utilisateur.modifier]
+      cible: lbernard2
+    penalite: -15
+    retour: >
+      Deux comptes « Bernard » existent. La recherche par nom renvoie les
+      deux : le service, le site ou le matricule permettent de choisir le bon.
+      Une action sur le mauvais compte touche un autre salarié.
+  action_sans_verification:
+    description: Déverrouiller avant d'avoir vérifié l'identité de l'appelante.
+    declencheur:
+      action: ad.utilisateur.deverrouiller
+      cible: lbernard
+      si: [{ indice: identite_verifiee, revele: false }]
+    penalite: -5
+    retour: >
+      Une demande de déverrouillage par téléphone est un vecteur classique
+      d'ingénierie sociale. Rappel au numéro de l'annuaire ou question
+      vérifiable (matricule, nom du manager) avant toute action sur un compte.
+
+actions_dangereuses:
+  deverrouillage_en_masse:
+    description: Déverrouiller tous les comptes verrouillés du domaine (Search-ADAccount -LockedOut | Unlock-ADAccount).
+    declencheur:
+      action: ad.utilisateurs.reinitialiser_en_masse
+      parametres: { operation: deverrouiller }
+    penalite: -20
+    gravite: majeure
+    effets:
+      - definir: { chemin: utilisateurs.mrobin.verrouillage.verrouille, valeur: false }
+    retour: >
+      Un verrouillage est aussi un signal de sécurité. Déverrouiller en masse
+      efface des indices (attaque par mot de passe en cours, compte d'un autre
+      ticket) et sort du périmètre de la demande. On ne traite que le compte
+      du demandeur, après vérification.
+
+resolution:
+  conditions:
+    - { chemin: utilisateurs.lbernard.verrouillage.verrouille, egal: false }
+    - { chemin: utilisateurs.lbernard2.mdp.version, egal: 9 }
+  etapes:
+    deverrouillage:
+      description: Compte lbernard déverrouillé.
+      points: 25
+      valide_par:
+        - { action: ad.utilisateur.deverrouiller, cible: lbernard }
+    test_connexion:
+      description: Ouverture de session testée avec l'utilisatrice après le déverrouillage.
+      points: 10
+      valide_par:
+        - action: ticket.demander_action_utilisateur
+          cible: INC0031101
+          parametres: { action: reessayer_connexion }
+          si: [{ chemin: utilisateurs.lbernard.verrouillage.verrouille, egal: false }]
+    mdp_conserve:
+      description: Mot de passe conservé (pas de réinitialisation).
+      points: 5
+      valide_par:
+        - si: [{ chemin: utilisateurs.lbernard.mdp.version, egal: 6 }]
+
+communication:
+  cloture:
+    ticket: INC0031101
+    elements:
+      cause:
+        description: Cause expliquée (tentatives erronées, verrouillage automatique).
+        mots_cles: [tentative, erron, verrouill, mauvais mot de passe, 5 essais]
+        points: 5
+      action:
+        description: Action réalisée (déverrouillage, mot de passe inchangé).
+        mots_cles: [déverrouill, debloqu, débloqu]
+        points: 5
+      conseil:
+        description: Conseil donné (Verr. Maj, attendre plutôt que réessayer, se souvenir que le compte se déverrouille seul après 30 minutes).
+        mots_cles: [majuscule, verr. maj, verr maj, caps, 30 minutes]
+        points: 5
+
+escalade:
+  equipes: []
+
+debrief:
+  - Un compte verrouillé une seule fois, depuis le poste habituel, avec une cause évidente, se traite au N1.
+  - Toujours vérifier l'identité de l'appelant avant d'agir sur son compte.
+  - La recherche par nom peut renvoyer des homonymes ; se fier au service, au site et au matricule.
+  - Déverrouiller n'est pas réinitialiser.
+  - Si le compte se reverrouille, ne pas déverrouiller une deuxième fois sans chercher la source (voir N2-08).

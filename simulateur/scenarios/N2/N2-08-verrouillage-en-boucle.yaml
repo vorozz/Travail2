@@ -1,0 +1,328 @@
+schema: scenario/1
+id: N2-08
+titre: Compte qui se reverrouille en boucle
+niveau: N2
+temps_cible: 25m
+environnement: vellane
+horloge: 2026-11-16T09:05:00+01:00
+competences: [verrouillage, journaux_dc, evenement_4740, sessions_distantes, methode]
+
+resume: >
+  Claire Martin a changé son mot de passe vendredi soir. Depuis, son compte
+  se verrouille toutes les vingt minutes environ ; un collègue N1 l'a déjà
+  déverrouillé ce matin, en vain. La source est une session restée ouverte
+  jeudi sur le poste de la salle de réunion Rhône, qui retente l'ancien mot
+  de passe toutes les trois minutes. Elle se trouve dans l'événement 4740 de
+  l'émulateur PDC.
+cause_racine: >
+  Session déconnectée de cmartin sur PC-PAR-SR04 depuis jeudi 16:31, avec des
+  lecteurs et un classeur Excel liés à \\SRV-FIC-01\Services. Toutes les
+  3 minutes, la reconnexion SMB présente l'ancien mot de passe (version 9) :
+  5 échecs en 15 minutes, verrouillage, déverrouillage automatique au bout
+  de 30 minutes, et ainsi de suite depuis vendredi 17:35.
+
+tickets:
+  INC0031702:
+    ouvert: -13m
+    demandeur: cmartin
+    poste: PC-PAR-0142
+    canal: telephone
+    priorite: P2
+    objet: Mon compte se bloque sans arrêt
+    description: |
+      Mon compte se bloque toutes les vingt minutes depuis ce matin. Le
+      support m'a débloquée tout à l'heure mais ça a recommencé. J'ai changé
+      mon mot de passe vendredi soir comme Windows me le demandait.
+    historique:
+      - { t: -39m, auteur: lduval, texte: "Compte déverrouillé à la demande de l'utilisatrice (appel de 08:24)." }
+    reponses:
+      depuis_quand: Ce matin dès 8 heures. Outlook me redemande sans cesse mon mot de passe, et après je suis bloquée.
+      changement_recent: J'ai changé mon mot de passe vendredi vers 17 h 20, depuis mon poste.
+      autre_poste: Jeudi après-midi j'ai présenté le budget en salle Rhône, au 4e. Mais je crois que j'ai fermé ma session... enfin, je ne suis plus sûre.
+      appareils_mobiles: Samedi j'ai remis le nouveau mot de passe dans le Wi-Fi de mon téléphone, il se connecte bien depuis.
+      collegues: Personne d'autre n'a ce problème.
+      deja_essaye: J'ai redémarré mon PC ce matin.
+      autorisation: Oui, vous pouvez fermer ma session de la salle Rhône, il n'y avait rien d'important.
+      par_defaut: Je ne sais pas, je voudrais juste pouvoir travailler.
+    verification_identite:
+      matricule: V01142
+    retours:
+      reessayer_connexion:
+        - si: [{ chemin: utilisateurs.cmartin.verrouillage.verrouille, egal: true }]
+          message: Bloquée, encore.
+        - message: C'est bon, je suis connectée.
+
+monde:
+  utilisateurs:
+    cmartin:
+      mdp: { dernier_changement: -2j15h45m, version: 10 }
+      verrouillage: { verrouille: true, depuis: -24m, dc: DC-PAR-01 }
+      mauvais_mdp:
+        DC-PAR-01: { compteur: 5, dernier: -24m }
+        DC-PAR-02: { compteur: 5, dernier: -24m }
+  postes:
+    PC-PAR-0142:
+      sessions:
+        cmartin: { etat: active, ouverte: -1h10m, mdp_version: 10 }
+    PC-PAR-SR04:
+      sessions:
+        cmartin:
+          id: 2
+          etat: deconnectee
+          ouverte: -3j18h03m
+          deconnectee: -3j16h34m
+          mdp_version: 9
+          applications: ['Excel (Budget_2027.xlsx, liens vers \\SRV-FIC-01\Services\Compta)']
+          lecteurs_mappes: [H, S]
+      journaux:
+        - evenement: lsm/21
+          t: -3j18h03m
+          donnees: { compte: cmartin, session: 2 }
+        - evenement: lsm/24
+          t: -3j16h34m
+          donnees: { compte: cmartin, session: 2 }
+  controleurs:
+    DC-PAR-01:
+      journaux:
+        - evenement: securite/4740
+          ref: lockout_vendredi
+          t: -2j15h30m
+          repeter: { intervalle: 45m, jusqu_a: -1h20m }
+          donnees: { compte: cmartin, appelant: PC-PAR-SR04 }
+        - evenement: securite/4767
+          ref: deverrouillage_n1
+          t: -39m
+          donnees: { auteur: lduval, compte: cmartin }
+        - evenement: securite/4740
+          ref: lockout_pdc
+          t: -24m
+          donnees: { compte: cmartin, appelant: PC-PAR-SR04 }
+    DC-PAR-02:
+      journaux:
+        - evenement: securite/4771
+          ref: echecs_sr04
+          t: -2j15h44m
+          repeter: { intervalle: 3m, jusqu_a: -1m }
+          donnees: { compte: cmartin, ip_client: 10.10.6.31, port: 51544, code: "0x18" }
+        - evenement: securite/4740
+          t: -24m
+          donnees: { compte: cmartin, appelant: PC-PAR-SR04 }
+
+dynamiques:
+  session_obsolete:
+    description: Tant que la session déconnectée existe sur PC-PAR-SR04, elle présente l'ancien mot de passe toutes les 3 minutes.
+    quand: { periodique: 3m }
+    si:
+      - { chemin: postes.PC-PAR-SR04.sessions.cmartin.existe, egal: true }
+    effets:
+      - authentification: { compte: cmartin, depuis: PC-PAR-SR04, mdp: ancien, protocole: kerberos, dc: DC-PAR-02 }
+
+indices:
+  reverrouillage:
+    description: Compte verrouillé depuis 08:41 (5 échecs), déverrouillé à 08:26 par le N1 ; mot de passe changé vendredi 17:20.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { action: ad.utilisateur.lire, cible: cmartin }
+  evenement_4740_pdc:
+    description: "4740 sur l'émulateur PDC (DC-PAR-01) : « Nom de l'ordinateur appelant : PC-PAR-SR04 »."
+    categorie: diagnostic
+    points: 10
+    revele_par:
+      - { evenement: lockout_pdc }
+      - { evenement: lockout_vendredi }
+  serie_depuis_vendredi:
+    description: Les verrouillages se répètent toutes les 45 minutes depuis vendredi 17:35, week-end compris, quand l'utilisatrice était absente.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { evenement: lockout_vendredi }
+  session_sr04:
+    description: Session cmartin (ID 2) déconnectée sur PC-PAR-SR04 depuis jeudi 16:31.
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: machine.sessions.lire, cible: PC-PAR-SR04 }
+  changement_mdp:
+    description: Le changement de mot de passe de vendredi a rendu obsolètes les identifiants des sessions ouvertes avant.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { question: changement_recent, ticket: INC0031702 }
+      - { action: ad.utilisateur.lire, cible: cmartin }
+  piste_salle:
+    description: L'utilisatrice a utilisé le poste de la salle Rhône jeudi.
+    categorie: diagnostic
+    points: 0
+    revele_par:
+      - { question: autre_poste, ticket: INC0031702 }
+  telephone_ecarte:
+    description: Le téléphone (Wi-Fi d'entreprise, authentifié sur l'AD) a reçu le nouveau mot de passe samedi ; les 4740 désignent un poste, pas le serveur RADIUS.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { question: appareils_mobiles, ticket: INC0031702 }
+  pas_une_attaque:
+    description: Les échecs viennent d'une seule adresse interne (10.10.6.31), toutes les 3 minutes, avec le code 0x18 ; aucun autre compte n'est visé.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { evenement: echecs_sr04 }
+  poste_principal_ok:
+    description: La session sur PC-PAR-0142 a été ouverte ce matin avec le nouveau mot de passe ; le poste habituel n'est pas en cause.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { action: machine.sessions.lire, cible: PC-PAR-0142 }
+      - { evenement: lockout_pdc }
+
+fausses_pistes:
+  telephone:
+    description: Le téléphone de l'utilisatrice, connecté au Wi-Fi avec son compte AD.
+    pourquoi_credible: C'est la cause la plus fréquente de verrouillage après un changement de mot de passe.
+    eliminee_par: [telephone_ecarte]
+    actions_inutiles: []
+    penalite: 0
+  attaque:
+    description: Une attaque par mot de passe (verrouillages répétés, y compris le week-end).
+    pourquoi_credible: Des verrouillages pendant le week-end, sans l'utilisatrice, ressemblent à une attaque.
+    eliminee_par: [pas_une_attaque]
+    actions_inutiles:
+      - { action: ad.utilisateur.desactiver, cible: cmartin }
+      - { action: ticket.escalader, parametres: { equipe: Securite } }
+    penalite: -10
+  poste_principal:
+    description: Des identifiants enregistrés sur son propre poste (gestionnaire d'identifiants).
+    pourquoi_credible: Outlook redemande le mot de passe sur son poste.
+    eliminee_par: [poste_principal_ok]
+    actions_inutiles:
+      - { action: machine.redemarrer, cible: PC-PAR-0142 }
+    penalite: -5
+
+pieges:
+  deverrouillage_sans_source:
+    description: Déverrouiller le compte alors que la session de PC-PAR-SR04 est toujours ouverte.
+    declencheur:
+      action: ad.utilisateur.deverrouiller
+      cible: cmartin
+      si: [{ chemin: postes.PC-PAR-SR04.sessions.cmartin.existe, egal: true }]
+    penalite: -10
+    retour: >
+      Le N1 l'a déjà fait à 08:26 : le compte s'est reverrouillé 15 minutes
+      plus tard. Tant que la source retente l'ancien mot de passe, chaque
+      déverrouillage repart pour un tour.
+  reinitialisation_mdp:
+    description: Réinitialiser le mot de passe de l'utilisatrice.
+    declencheur: { action: ad.utilisateur.reinitialiser_mdp, cible: cmartin }
+    penalite: -10
+    retour: >
+      La session de la salle Rhône présente toujours l'ancien mot de passe :
+      le compte se reverrouille, et l'utilisatrice doit en apprendre un
+      nouveau pour rien.
+  fermeture_sans_accord:
+    description: Fermer la session de la salle Rhône sans l'accord de l'utilisatrice.
+    declencheur:
+      action: machine.session.fermer
+      cible: PC-PAR-SR04
+      si: [{ indice: piste_salle, revele: false }]
+    penalite: -5
+    retour: Fermer une session fait perdre le travail non enregistré ; on prévient la personne avant.
+
+actions_dangereuses:
+  seuil_verrouillage:
+    description: Modifier la stratégie de verrouillage du domaine (seuil à 0, seuil relevé, durée raccourcie).
+    declencheur:
+      action: ad.domaine.strategie_mdp.modifier
+      cible: vellane.local
+      parametres: { propriete: [seuil, LockoutThreshold, duree, LockoutDuration, fenetre_observation] }
+    penalite: -40
+    gravite: critique
+    effets:
+      - evenement: { machine: DC-PAR-01, evenement: securite/4739, donnees: { type_modification: Stratégie de verrouillage modifiée, auteur: adm-apprenant, parametre: Seuil de verrouillage du compte, valeur: "0" } }
+    retour: >
+      Désactiver ou assouplir le verrouillage pour tout le domaine afin de
+      régler le cas d'une personne ouvre la porte aux attaques par mot de
+      passe sur 2 400 comptes.
+  desactivation_compte:
+    description: Désactiver le compte de l'utilisatrice « par précaution ».
+    declencheur: { action: ad.utilisateur.desactiver, cible: cmartin }
+    penalite: -25
+    gravite: majeure
+    retour: Aucun indice d'attaque ne le justifie ; l'utilisatrice ne peut plus travailler du tout.
+
+resolution:
+  conditions:
+    - { chemin: postes.PC-PAR-SR04.sessions.cmartin.existe, egal: false }
+    - { chemin: utilisateurs.cmartin.verrouillage.verrouille, egal: false }
+    - { chemin: domaines.vellane.local.strategie_verrouillage.seuil, egal: 5 }
+  etapes:
+    source_supprimee:
+      description: Session obsolète fermée sur PC-PAR-SR04 (logoff ou redémarrage du poste de la salle).
+      points: 12
+      valide_par:
+        - si: [{ chemin: postes.PC-PAR-SR04.sessions.cmartin.existe, egal: false }]
+    deverrouillage_apres:
+      description: Compte déverrouillé après la suppression de la source.
+      points: 10
+      valide_par:
+        - action: ad.utilisateur.deverrouiller
+          cible: cmartin
+          si: [{ chemin: postes.PC-PAR-SR04.sessions.cmartin.existe, egal: false }]
+    stabilite:
+      description: Absence de nouveau verrouillage vérifiée au moins 15 minutes après la correction.
+      points: 8
+      valide_par:
+        - action: [ad.utilisateur.lire, machine.journal.lire]
+          apres: { etape: deverrouillage_apres, delai: 15m }
+
+communication:
+  cloture:
+    ticket: INC0031702
+    elements:
+      cause:
+        description: Cause (session restée ouverte en salle Rhône avec l'ancien mot de passe).
+        mots_cles: [salle, Rhône, PC-PAR-SR04, session, ancien mot de passe]
+        points: 5
+      action:
+        description: Actions (session fermée, compte déverrouillé, stabilité vérifiée).
+        mots_cles: [fermé, déconnect, déverrouill]
+        points: 5
+      conseil:
+        description: Conseil (fermer sa session sur les postes partagés ; après un changement de mot de passe, se déconnecter des autres postes).
+        mots_cles: [fermer sa session, se déconnecter, poste partagé, salle de réunion]
+        points: 5
+
+escalade:
+  equipes: [N2-Systemes]
+  delai_cible: 8m
+  indices_attendus:
+    N1: [reverrouillage, changement_mdp, piste_salle, telephone_ecarte]
+  note:
+    elements:
+      symptome:
+        description: Verrouillages répétés.
+        mots_cles: [reverrouill, se rebloque, boucle, toutes les 20 minutes, se bloque]
+        points: 6
+      historique:
+        description: Déverrouillage déjà fait par le N1 et reverrouillage constaté (heures).
+        mots_cles: [déverrouillé, 08:26, 8 h 26, 08:41, reverrouillé]
+        points: 8
+      changement:
+        description: Changement de mot de passe vendredi.
+        mots_cles: [vendredi, changé son mot de passe, changement de mot de passe]
+        points: 6
+      autres_appareils:
+        description: Pistes de source (salle Rhône jeudi, téléphone mis à jour).
+        mots_cles: [salle, Rhône, téléphone, autre poste]
+        points: 5
+      demande:
+        description: Demande explicite de recherche de la source dans les journaux des DC.
+        mots_cles: [source, 4740, journaux, PDC]
+        points: 5
+
+debrief:
+  - Un compte qui se reverrouille ne se déverrouille pas une deuxième fois sans chercher la source.
+  - L'événement 4740 de l'émulateur PDC donne l'ordinateur appelant ; les 4771 donnent l'adresse IP et le rythme.
+  - Des échecs réguliers depuis une seule machine interne signent un identifiant obsolète, pas une attaque.
+  - Après la correction, attendre et vérifier : un seul déverrouillage réussi ne prouve rien.
+  - On ne touche jamais à la stratégie de verrouillage du domaine pour un compte.

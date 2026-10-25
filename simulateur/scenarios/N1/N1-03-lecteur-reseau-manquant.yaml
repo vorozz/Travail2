@@ -1,0 +1,211 @@
+schema: scenario/1
+id: N1-03
+titre: Lecteur réseau manquant, l'utilisatrice n'est pas dans le bon groupe
+niveau: N1
+temps_cible: 12m
+environnement: vellane
+horloge: 2026-11-04T10:20:00+01:00
+competences: [groupes, lecteurs_reseau, jeton_de_session, moindre_privilege]
+
+resume: >
+  Sophie Nguyen est passée des RH au contrôle de gestion lundi. Il lui
+  manque le lecteur P: (Projets_CG) de ses collègues. Son responsable a
+  validé un accès en modification. Il faut l'ajouter au bon groupe, et
+  seulement à celui-là, puis lui faire fermer et rouvrir sa session.
+cause_racine: >
+  Le lecteur P: est créé par GPO_U_Lecteurs_Reseau pour les membres de
+  GG_CTRLGEST_Projets_RW ou _R. Le compte n'est dans aucun des deux ; il
+  garde en revanche ses groupes RH (GG_RH_Tous, GG_RH_Dossiers_Personnel).
+
+tickets:
+  INC0031240:
+    ouvert: -12m
+    demandeur: snguyen
+    poste: PC-PAR-0201
+    canal: portail
+    priorite: P3
+    objet: "Lecteur P: absent"
+    description: |
+      Bonjour, depuis mon arrivée au contrôle de gestion lundi, je n'ai pas le
+      lecteur P: (Projets) que mes collègues utilisent. Mon responsable,
+      Pierre Garnier, a validé la demande DEM0004417. Il faudrait que j'aie
+      les mêmes accès que Chloé.
+    reponses:
+      depuis_quand: Depuis lundi, mon premier jour au contrôle de gestion.
+      changement_recent: Oui, j'étais aux RH jusqu'à vendredi dernier.
+      deja_essaye: J'ai redémarré lundi soir, rien n'a changé.
+      collegues: Chloé et Pierre ont bien le P:.
+      message_exact: Il n'y a pas de message, le lecteur n'apparaît pas dans Ce PC.
+      autorisation: Oui, vous pouvez fermer ma session, j'enregistre mes fichiers d'abord.
+      par_defaut: Je ne sais pas.
+    retours:
+      fermer_session:
+        - si: [{ chemin: postes.PC-PAR-0201.sessions.snguyen.lecteurs, contient: P }, { chemin: utilisateurs.snguyen.groupes, contient: GG_CTRLGEST_Projets_RW }]
+          message: "Ça y est, j'ai le lecteur P: et j'arrive à enregistrer dedans. Merci !"
+        - si: [{ chemin: postes.PC-PAR-0201.sessions.snguyen.lecteurs, contient: P }]
+          message: Je vois le lecteur P:, mais je ne peux rien enregistrer, j'ai un message « Accès refusé ».
+        - message: "Toujours pas de lecteur P: après m'être reconnectée."
+      ouvrir_lecteur:
+        - si: [{ chemin: postes.PC-PAR-0201.sessions.snguyen.lecteurs, contient: P }]
+          message: "Le lecteur P: s'ouvre."
+        - message: Je n'ai pas de lecteur P:, je ne peux pas l'ouvrir.
+
+monde:
+  utilisateurs:
+    snguyen:
+      groupes: [GG_Tous_Paris, GG_RH_Tous, GG_RH_Dossiers_Personnel]
+      description: "Mutation RH -> Contrôle de gestion le 02/11/2026"
+  postes:
+    PC-PAR-0201:
+      sessions:
+        snguyen:
+          etat: active
+          ouverte: -1h52m
+          # Groupes figés à l'ouverture de session : les lecteurs en découlent.
+          jeton: [GG_Tous_Paris, GG_RH_Tous, GG_RH_Dossiers_Personnel]
+  documents:
+    DEM0004417:
+      titre: Demande d'accès - Sophie Nguyen
+      contenu: >
+        Demandeur : Pierre Garnier, responsable du contrôle de gestion.
+        Bénéficiaire : Sophie Nguyen (V01201). Objet : accès en modification au
+        partage Projets du contrôle de gestion (lecteur P:), comme Chloé Blanc.
+        Statut : validée le 03/11/2026 par P. Garnier.
+
+indices:
+  demande_validee:
+    description: La demande DEM0004417 est validée par le responsable et ne porte que sur Projets_CG en modification.
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: document.consulter, cible: DEM0004417 }
+  lecteurs_actuels:
+    description: "La session a H:, S: et R: (RH), mais pas P:."
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: machine.lecteurs.lire, cible: PC-PAR-0201 }
+  pas_membre:
+    description: Le compte n'est membre d'aucun groupe Projets_CG ; il est encore dans GG_RH_Tous et GG_RH_Dossiers_Personnel.
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: ad.utilisateur.groupes.lire, cible: snguyen }
+  groupe_cible:
+    description: "GG_CTRLGEST_Projets_RW donne P: en modification (description du groupe, comparaison avec un collègue)."
+    categorie: diagnostic
+    points: 10
+    revele_par:
+      - { action: ad.groupe.lire, cible: GG_CTRLGEST_Projets_RW }
+      - { action: ad.groupe.rechercher, parametres: { filtre: CTRLGEST } }
+  droits_rh_residuels:
+    description: Le compte garde l'accès aux dossiers individuels des salariés (GG_RH_Dossiers_Personnel) alors qu'elle a quitté les RH.
+    categorie: diagnostic
+    points: 0
+    revele_par:
+      - { action: ad.utilisateur.groupes.lire, cible: snguyen }
+      - { action: machine.lecteurs.lire, cible: PC-PAR-0201 }
+
+pieges:
+  groupe_non_valide:
+    description: Ajouter un groupe que la demande ne couvre pas (archives, budget de la direction).
+    declencheur:
+      action: ad.groupe.ajouter_membre
+      cible: [GG_CTRLGEST_Archives_RW, GG_CTRLGEST_Budget_Direction]
+      parametres: { membre: snguyen }
+    penalite: -10
+    retour: >
+      La validation porte sur Projets_CG uniquement. « Les mêmes accès que
+      Chloé » n'est pas une validation : Chloé a aussi les archives. Chaque
+      accès est validé par le responsable, groupe par groupe.
+  lecture_seule:
+    description: Ajouter GG_CTRLGEST_Projets_R alors que la demande porte sur la modification.
+    declencheur:
+      action: ad.groupe.ajouter_membre
+      cible: GG_CTRLGEST_Projets_R
+      parametres: { membre: snguyen }
+    penalite: -5
+    retour: >
+      Le groupe _R donne le lecteur P: en lecture seule : l'utilisatrice
+      verra le lecteur mais ne pourra pas enregistrer. Lire la description
+      des groupes avant d'ajouter.
+  cloture_prematuree:
+    description: "Clôturer avant que l'utilisatrice ait le lecteur P: dans sa session."
+    declencheur:
+      action: ticket.cloturer
+      cible: INC0031240
+      si: [{ chemin: postes.PC-PAR-0201.sessions.snguyen.lecteurs, ne_contient_pas: P }]
+    penalite: -10
+    retour: >
+      Après l'ajout au groupe, la session garde son ancien jeton : ni le
+      temps ni un gpupdate n'y changent rien. Il faut une fermeture et une
+      réouverture de session, et la confirmation de l'utilisatrice.
+
+actions_dangereuses:
+  copie_des_groupes:
+    description: Copier tous les groupes d'un collègue (Chloé Blanc ou Pierre Garnier) sur le compte.
+    declencheur:
+      action: ad.utilisateur.copier_groupes
+      cible: snguyen
+    penalite: -20
+    gravite: majeure
+    effets:
+      - ajouter: { chemin: utilisateurs.snguyen.groupes, valeur: GG_CTRLGEST_Projets_RW }
+      - ajouter: { chemin: utilisateurs.snguyen.groupes, valeur: GG_CTRLGEST_Archives_RW }
+    retour: >
+      Recopier les groupes d'un collègue donne des droits jamais validés (et
+      ceux du responsable, des droits de direction). C'est la première cause
+      d'accumulation de privilèges. On ajoute le seul groupe demandé.
+
+resolution:
+  conditions:
+    - { chemin: utilisateurs.snguyen.groupes, contient: GG_CTRLGEST_Projets_RW }
+    - { chemin: utilisateurs.snguyen.groupes, ne_contient_pas: GG_CTRLGEST_Archives_RW }
+    - { chemin: utilisateurs.snguyen.groupes, ne_contient_pas: GG_CTRLGEST_Budget_Direction }
+  etapes:
+    ajout_groupe:
+      description: Compte ajouté à GG_CTRLGEST_Projets_RW.
+      points: 20
+      valide_par:
+        - { action: ad.groupe.ajouter_membre, cible: GG_CTRLGEST_Projets_RW, parametres: { membre: snguyen } }
+    reouverture_session:
+      description: Fermeture et réouverture de session demandées après l'ajout.
+      points: 10
+      valide_par:
+        - action: ticket.demander_action_utilisateur
+          cible: INC0031240
+          parametres: { action: fermer_session }
+          si: [{ chemin: utilisateurs.snguyen.groupes, contient: GG_CTRLGEST_Projets_RW }]
+    verification:
+      description: "Lecteur P: présent et accessible en écriture, confirmé par l'utilisatrice."
+      points: 10
+      valide_par:
+        - si:
+            - { chemin: postes.PC-PAR-0201.sessions.snguyen.lecteurs, contient: P }
+            - { chemin: postes.PC-PAR-0201.sessions.snguyen.jeton, contient: GG_CTRLGEST_Projets_RW }
+
+communication:
+  cloture:
+    ticket: INC0031240
+    elements:
+      action:
+        description: Groupe ajouté, référence de la demande validée.
+        mots_cles: [GG_CTRLGEST_Projets_RW, Projets_RW, DEM0004417]
+        points: 5
+      consigne:
+        description: Consigne de fermeture et réouverture de session expliquée.
+        mots_cles: [fermer la session, fermeture de session, déconnect, reconnect, rouvrir]
+        points: 5
+      droits_residuels:
+        description: Accès RH résiduels signalés au responsable (sans les retirer d'office).
+        mots_cles: [RH, GG_RH_Dossiers_Personnel, dossiers du personnel, mutation, anciens droits]
+        points: 5
+
+escalade:
+  equipes: []
+
+debrief:
+  - Un lecteur réseau qui manque est presque toujours une question de groupe ; la description du groupe et la GPO de lecteurs disent lequel.
+  - On n'ajoute que ce qui est validé ; « comme un collègue » ne vaut pas validation.
+  - Une session garde les groupes de son ouverture ; gpupdate ne met pas à jour le jeton de l'utilisateur.
+  - Une mutation laisse souvent des droits de l'ancien service ; les signaler fait partie du travail.

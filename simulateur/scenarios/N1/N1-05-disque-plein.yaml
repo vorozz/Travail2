@@ -1,0 +1,282 @@
+schema: scenario/1
+id: N1-05
+titre: Disque C plein qui fait planter une application
+niveau: N1
+temps_cible: 15m
+environnement: vellane
+horloge: 2026-11-06T14:05:00+01:00
+competences: [espace_disque, journaux_poste, nettoyage, consentement_utilisateur]
+
+resume: >
+  Compteo plante à chaque export de la clôture mensuelle chez Emma Bonnet
+  (Lyon). Le disque C est plein : 148 Go de fichiers de trace laissés par le
+  mode diagnostic que le support de l'éditeur avait activé il y a trois
+  semaines. Un nettoyage de disque suffit à faire repartir l'export
+  aujourd'hui, mais le disque sera de nouveau plein lundi si le niveau de
+  trace n'est pas remis à 1.
+cause_racine: >
+  NiveauTrace=5 dans C:\ProgramData\Compteo\compteo.ini depuis le 16/10
+  (ticket éditeur CPT-88213, clos le 23/10). Compteo écrit environ 7 Go de
+  traces par jour dans C:\ProgramData\Compteo\Logs.
+
+tickets:
+  INC0031377:
+    ouvert: -9m
+    demandeur: ebonnet
+    poste: PC-LYO-0118
+    canal: telephone
+    priorite: P2
+    objet: Compteo se ferme pendant l'export de clôture
+    description: |
+      Compteo se ferme d'un coup quand je lance l'export de la clôture
+      d'octobre, à chaque fois. La clôture doit partir au siège ce soir. Et
+      depuis ce matin le PC est très lent.
+    reponses:
+      depuis_quand: L'export plante depuis ce matin. Le PC rame depuis deux ou trois jours.
+      message_exact: Aucun message, la fenêtre se ferme. Hier j'ai vu une bulle « Espace disque insuffisant » mais je l'ai fermée.
+      changement_recent: Le support de Compteo avait pris la main sur mon PC il y a quelques semaines pour un problème de lettrage. C'est réglé depuis.
+      deja_essaye: J'ai redémarré deux fois.
+      collegues: Les autres comptables de Lyon font leur export sans problème.
+      autorisation: La corbeille et les téléchargements, vous pouvez vider, ce sont de vieux fichiers. Mais surtout pas mes Documents, toute ma clôture est dedans.
+      par_defaut: Je ne sais pas, je ne suis pas informaticienne.
+    retours:
+      lancer_application:
+        - si: [{ chemin: postes.PC-LYO-0118.disques.C.libre, sup: 2Go }]
+          message: L'export est passé ! Le fichier de clôture est parti.
+        - message: Compteo s'est encore fermé pendant l'export.
+
+monde:
+  postes:
+    PC-LYO-0118:
+      disques:
+        C: { taille: 237Go, libre: 412Mo }
+      logiciels: [Compteo 9.2 (client lourd)]
+      fichiers:
+        'C:\ProgramData\Compteo\Logs': { type: dossier, taille: 148Go, contenu: "trace_20261016.log ... trace_20261106.log (environ 7 Go chacun)" }
+        'C:\ProgramData\Compteo\compteo.ini':
+          taille: 2Ko
+          modifie: -21j
+          contenu: |
+            [Serveur]
+            Adresse=compta.vellane.local
+            Port=8443
+            [Diagnostic]
+            ; Activé par le support éditeur le 16/10/2026 (ticket CPT-88213)
+            NiveauTrace=5
+            DossierTrace=C:\ProgramData\Compteo\Logs
+        'C:\ProgramData\Compteo\Base': { type: dossier, taille: 1.4Go, contenu: "Base locale et licence du poste" }
+        'C:\Users\ebonnet\Documents': { type: dossier, taille: 3.1Go, contenu: "Clôture 2026-10, déclarations, modèles" }
+        'C:\Users\ebonnet\Downloads': { type: dossier, taille: 6.2Go, contenu: "Formation_Compteo_2026.mp4, anciens relevés bancaires zippés, installeurs" }
+        'C:\Users\ebonnet\AppData\Local\Microsoft\Outlook': { type: dossier, taille: 9.8Go }
+        'C:\$Recycle.Bin': { type: dossier, taille: 2.3Go }
+        'C:\Windows': { type: dossier, taille: 31Go }
+        'C:\Windows\WinSxS': { type: dossier, taille: 9.4Go }
+        'C:\Windows\Installer': { type: dossier, taille: 4.1Go }
+        'C:\Windows\SoftwareDistribution\Download': { type: dossier, taille: 3.6Go }
+        'C:\Windows\Temp': { type: dossier, taille: 1.1Go }
+        'C:\Program Files': { type: dossier, taille: 14Go }
+        'C:\Program Files (x86)': { type: dossier, taille: 6Go }
+        'C:\pagefile.sys': { taille: 8Go }
+        'C:\hiberfil.sys': { taille: 6.4Go }
+      journaux:
+        - evenement: dotnet/1026
+          ref: crash_compteo
+          t: -11m
+          donnees:
+            application: Compteo.exe
+            exception: System.IO.IOException
+            pile: |
+              Message : Espace insuffisant sur le disque.
+              à System.IO.__Error.WinIOError(Int32 errorCode, String maybeFullPath)
+              à System.IO.FileStream.WriteCore(Byte[] buffer, Int32 offset, Int32 count)
+              à Compteo.Export.ClotureWriter.Flush()
+              à Compteo.Export.ClotureMensuelle.Executer()
+        - evenement: dotnet/1026
+          t: -48m
+          donnees: { application: Compteo.exe, exception: System.IO.IOException, pile: "Message : Espace insuffisant sur le disque." }
+        - evenement: srv/2013
+          ref: alerte_disque
+          t: -3h
+          repeter: { intervalle: 1h, jusqu_a: -1h }
+          donnees: { disque: "C:" }
+        - evenement: windowsupdate/19
+          t: -2j
+          donnees: { mise_a_jour: "Mise à jour de la veille de sécurité pour l’antivirus Bouclier 12 (version 1.421.88.0)" }
+  documents:
+    KB-0142:
+      titre: Compteo - mode trace
+      niveau: N1
+      contenu: >
+        Le support de l'éditeur active parfois NiveauTrace=5 dans
+        C:\ProgramData\Compteo\compteo.ini pour un diagnostic. Ce niveau écrit
+        environ 7 Go par jour. Une fois le ticket éditeur clos, remettre
+        NiveauTrace=1 et supprimer les fichiers trace_*.log du dossier Logs.
+        Ne jamais supprimer le dossier Base (base locale et licence).
+    CPT-88213:
+      titre: Ticket éditeur Compteo - problème de lettrage (E. Bonnet)
+      contenu: >
+        Ouvert le 16/10/2026. Prise en main, activation des traces niveau 5.
+        Correctif livré le 22/10. Clos le 23/10/2026.
+
+dynamiques:
+  traces:
+    description: Tant que NiveauTrace=5 et que Compteo tourne, le dossier Logs grossit d'environ 300 Mo par heure.
+    quand: { periodique: 10m }
+    si:
+      - { chemin: ['postes', 'PC-LYO-0118', 'fichiers', 'C:\ProgramData\Compteo\compteo.ini', 'contenu'], contient: NiveauTrace=5 }
+    effets:
+      - ajouter: { chemin: ['postes', 'PC-LYO-0118', 'fichiers', 'C:\ProgramData\Compteo\Logs', 'taille'], valeur: 50Mo }
+
+indices:
+  disque_plein:
+    description: Il reste 412 Mo libres sur 237 Go sur C:.
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: machine.disques.lire, cible: PC-LYO-0118 }
+  erreur_appli:
+    description: Compteo s'arrête sur une IOException « Espace insuffisant sur le disque » ; alertes srv 2013 depuis ce matin.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { evenement: crash_compteo }
+      - { evenement: alerte_disque }
+  logs_volumineux:
+    description: C:\ProgramData\Compteo\Logs occupe 148 Go (un fichier de trace d'environ 7 Go par jour depuis le 16/10).
+    categorie: diagnostic
+    points: 10
+    revele_par:
+      - { action: machine.fichiers.lister, cible: PC-LYO-0118, parametres: { chemin: 'C:\ProgramData', recursif: true } }
+      - { action: machine.fichiers.lister, cible: PC-LYO-0118, parametres: { chemin: 'C:\', recursif: true } }
+      - { action: machine.fichiers.lister, cible: PC-LYO-0118, parametres: { chemin: 'C:\ProgramData\Compteo' } }
+  trace_activee:
+    description: NiveauTrace=5 dans compteo.ini, activé pour le ticket éditeur CPT-88213, clos depuis le 23/10.
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: machine.fichiers.lire, cible: PC-LYO-0118, parametres: { chemin: 'C:\ProgramData\Compteo\compteo.ini' } }
+  accord_utilisateur:
+    description: L'utilisatrice accepte de vider la corbeille et les téléchargements, pas ses Documents.
+    categorie: diagnostic
+    points: 0
+    revele_par:
+      - { question: autorisation, ticket: INC0031377 }
+
+fausses_pistes:
+  nettoyage_windows:
+    description: Le nettoyage de disque Windows (fichiers temporaires, cache des mises à jour, corbeille) libère environ 7 Go.
+    pourquoi_credible: L'export repart aussitôt ; le problème semble réglé.
+    eliminee_par: [logs_volumineux]
+    actions_inutiles: []
+    penalite: 0
+
+pieges:
+  cause_non_traitee:
+    description: Clôturer sans avoir remis NiveauTrace=1, même si l'export fonctionne.
+    declencheur:
+      action: ticket.cloturer
+      cible: INC0031377
+      si:
+        - { chemin: ['postes', 'PC-LYO-0118', 'fichiers', 'C:\ProgramData\Compteo\compteo.ini', 'contenu'], contient: NiveauTrace=5 }
+    penalite: -10
+    retour: >
+      L'espace libéré sera reconsommé en quelques jours : la trace écrit 7 Go
+      par jour. Traiter la cause (niveau de trace), pas seulement le
+      symptôme. La KB-0142 décrit la manœuvre.
+  fichiers_perso_sans_accord:
+    description: Supprimer des fichiers de l'utilisatrice (Téléchargements, corbeille) sans son accord.
+    declencheur:
+      - action: machine.fichiers.supprimer
+        cible: PC-LYO-0118
+        parametres: { chemin: ['C:\Users\ebonnet\Downloads', 'C:\$Recycle.Bin'] }
+        si: [{ indice: accord_utilisateur, revele: false }]
+      - action: machine.nettoyage_disque
+        cible: PC-LYO-0118
+        parametres: { categories: [corbeille] }
+        si: [{ indice: accord_utilisateur, revele: false }]
+    penalite: -10
+    retour: On ne supprime aucun fichier personnel, même la corbeille, sans l'accord explicite de l'utilisateur.
+
+actions_dangereuses:
+  dossiers_systeme:
+    description: Supprimer le contenu de C:\Windows\Installer, C:\Windows\WinSxS ou d'un dossier système.
+    declencheur:
+      action: machine.fichiers.supprimer
+      cible: PC-LYO-0118
+      parametres: { chemin: ['C:\Windows\Installer', 'C:\Windows\WinSxS', 'C:\Windows\System32'] }
+    penalite: -25
+    gravite: majeure
+    retour: >
+      C:\Windows\Installer contient les sources nécessaires aux réparations et
+      désinstallations ; WinSxS se nettoie avec DISM, jamais à la main. Le
+      poste risque de ne plus pouvoir se mettre à jour.
+  documents_utilisateur:
+    description: Supprimer les Documents de l'utilisatrice.
+    declencheur:
+      action: machine.fichiers.supprimer
+      cible: PC-LYO-0118
+      parametres: { chemin: 'C:\Users\ebonnet\Documents' }
+    penalite: -30
+    gravite: critique
+    fin_scenario: true
+    retour: Perte de la clôture mensuelle, non sauvegardée ailleurs. Aucun fichier de travail ne se supprime pour faire de la place.
+  base_compteo:
+    description: Supprimer tout C:\ProgramData\Compteo (ou le dossier Base) au lieu des seuls fichiers de trace.
+    declencheur:
+      action: machine.fichiers.supprimer
+      cible: PC-LYO-0118
+      parametres: { chemin: ['C:\ProgramData\Compteo', 'C:\ProgramData\Compteo\Base'] }
+    penalite: -20
+    gravite: majeure
+    retour: Le dossier Base contient la base locale et la licence du poste ; Compteo ne démarre plus et doit être réinstallé par l'éditeur.
+
+resolution:
+  conditions:
+    - { chemin: postes.PC-LYO-0118.disques.C.libre, sup: 20Go }
+    - { chemin: ['postes', 'PC-LYO-0118', 'fichiers', 'C:\ProgramData\Compteo\compteo.ini', 'contenu'], contient: NiveauTrace=1 }
+    - { chemin: ['postes', 'PC-LYO-0118', 'fichiers', 'C:\Users\ebonnet\Documents', 'existe'], egal: true }
+  etapes:
+    espace_libere:
+      description: Plus de 20 Go libres sur C (fichiers de trace supprimés).
+      points: 15
+      valide_par:
+        - si: [{ chemin: postes.PC-LYO-0118.disques.C.libre, sup: 20Go }]
+    trace_desactivee:
+      description: NiveauTrace remis à 1 dans compteo.ini.
+      points: 15
+      valide_par:
+        - si: [{ chemin: ['postes', 'PC-LYO-0118', 'fichiers', 'C:\ProgramData\Compteo\compteo.ini', 'contenu'], contient: NiveauTrace=1 }]
+    export_teste:
+      description: Export de clôture relancé avec succès par l'utilisatrice.
+      points: 10
+      valide_par:
+        - action: ticket.demander_action_utilisateur
+          cible: INC0031377
+          parametres: { action: lancer_application }
+          si: [{ chemin: postes.PC-LYO-0118.disques.C.libre, sup: 2Go }]
+
+communication:
+  cloture:
+    ticket: INC0031377
+    elements:
+      cause:
+        description: Cause expliquée (traces Compteo laissées au niveau 5 qui ont rempli le disque).
+        mots_cles: [trace, journaux, logs, NiveauTrace]
+        points: 5
+      action:
+        description: Actions réalisées (fichiers de trace supprimés, niveau de trace remis à 1, espace libéré).
+        mots_cles: [supprim, niveau 1, NiveauTrace=1, libéré, Go libres]
+        points: 5
+      prevention:
+        description: Prévention (rappel au support éditeur ou au référent Compteo de désactiver les traces en fin de ticket).
+        mots_cles: [éditeur, CPT-88213, référent, désactiver les traces, fin de diagnostic]
+        points: 5
+
+escalade:
+  equipes: []
+
+debrief:
+  - Une application qui plante sans message se diagnostique d'abord dans le journal Application du poste.
+  - Chercher où est l'espace avant de supprimer quoi que ce soit ; le plus gros dossier n'est pas toujours celui qu'on croit.
+  - Un nettoyage qui fait repartir l'application ne règle pas une cause qui continue d'écrire.
+  - Aucun fichier personnel ne se supprime sans accord ; aucun dossier système ne se supprime à la main.

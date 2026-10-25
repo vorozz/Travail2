@@ -1,0 +1,35 @@
+# Intentions reconnues quand l'apprenant pose une question au demandeur
+# (action ticket.question). Le moteur rapproche la question tapée d'une
+# intention par ses formulations type ; le scénario donne la réponse du
+# demandeur pour chaque intention (tickets.<n°>.reponses).
+# Sans réponse prévue, le demandeur répond `reponses.par_defaut`.
+
+schema: questions/1
+
+intentions:
+  depuis_quand:
+    exemples: ["Depuis quand ?", "Ça a commencé quand ?", "Ça marchait hier ?"]
+  message_exact:
+    exemples: ["Quel est le message exact ?", "Pouvez-vous me lire l'erreur ?", "Une capture d'écran ?"]
+  changement_recent:
+    exemples: ["Quelque chose a changé récemment ?", "Vous avez changé votre mot de passe ?", "Nouveau poste, déménagement, mise à jour ?"]
+  autre_poste:
+    exemples: ["Vous utilisez un autre ordinateur ?", "Êtes-vous connecté ailleurs ?", "Salle de réunion, portable, poste d'un collègue ?"]
+  appareils_mobiles:
+    exemples: ["Vos mails sur votre téléphone ?", "Une tablette ?", "Le Wi-Fi avec votre compte ?"]
+  collegues:
+    exemples: ["Vos collègues ont-ils le même problème ?", "D'autres personnes sont touchées ?"]
+  deja_essaye:
+    exemples: ["Qu'avez-vous déjà essayé ?", "Vous avez redémarré ?"]
+  localisation:
+    exemples: ["Où êtes-vous ?", "Sur site ou en télétravail ?", "Quel bâtiment, quel étage ?"]
+  impact:
+    exemples: ["Êtes-vous bloqué ?", "C'est urgent ?", "Combien de personnes ?"]
+  reproduire:
+    exemples: ["Pouvez-vous réessayer maintenant ?", "Ça le refait si vous recommencez ?"]
+  actions_utilisateur:
+    exemples: ["Qu'est-ce que vous faisiez juste avant ?", "Quel fichier avez-vous ouvert ou imprimé ?"]
+  materiel:
+    exemples: ["Quel est le nom de votre ordinateur ?", "C'est un portable ?", "L'étiquette sous le poste ?"]
+  autorisation:
+    exemples: ["Puis-je supprimer ces fichiers ?", "Êtes-vous d'accord pour vider la corbeille ?", "Je peux fermer votre session ?"]

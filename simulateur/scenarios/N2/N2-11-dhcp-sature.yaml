@@ -1,0 +1,372 @@
+schema: scenario/1
+id: N2-11
+titre: Nouveaux postes sans adresse IP sur un site, étendue DHCP saturée
+niveau: N2
+temps_cible: 25m
+environnement: vellane
+horloge: 2026-11-19T08:40:00+01:00
+competences: [dhcp, baux, exclusions, renouvellement_de_parc]
+
+resume: >
+  À Lyon, les six postes neufs installés ce matin restent en 169.254.x.x, et
+  une commerciale qui rentre de dix jours de déplacement n'a plus de réseau.
+  L'étendue LYO-Postes est pleine : les 42 anciens postes remplacés cette
+  semaine, éteints en salle de stockage, gardent leurs baux de 8 jours. Il
+  faut libérer ces baux-là, et seulement eux, sans toucher aux exclusions qui
+  protègent les copieurs et les bornes Wi-Fi.
+cause_racine: >
+  Pool de 190 adresses (10.20.10.10 à .199, exclusion .200 à .250 pour les
+  équipements fixes). Renouvellement de parc CHG0004610 : 36 postes neufs ont
+  pris des adresses depuis lundi pendant que les 42 anciens, éteints, gardent
+  des baux valides jusqu'à 7 jours. Occupation 100 %, aucun bail disponible.
+
+tickets:
+  INC0031820:
+    ouvert: -18m
+    demandeur: kleroy
+    poste: PC-LYO-0237
+    canal: telephone
+    priorite: P2
+    objet: Postes neufs sans réseau (169.254)
+    description: |
+      Les 6 postes neufs installés ce matin (PC-LYO-0237 à PC-LYO-0242) n'ont
+      pas d'adresse : ipconfig donne du 169.254. Les 36 installés depuis lundi
+      fonctionnent. J'ai changé les câbles et testé d'autres prises, pareil.
+      Kevin Leroy, technicien de proximité Lyon.
+    reponses:
+      depuis_quand: Ce matin à l'installation. Hier soir, les derniers postes installés ont eu du réseau.
+      deja_essaye: J'ai changé les câbles, essayé deux autres prises, fait ipconfig /renew. Mon portable branché sur la même prise a bien du réseau.
+      collegues: Les 36 autres postes neufs, même modèle, même master, marchent tous.
+      changement_recent: C'est le renouvellement du parc, CHG0004610. Les anciens postes sont éteints en salle de stockage jusqu'à la reprise du 27.
+      localisation: Je suis sur place, au 1er étage de l'agence.
+      message_exact: "ipconfig affiche « Adresse IPv4 d'autoconfiguration . . . : 169.254.71.12 »."
+      par_defaut: Je peux faire des manipulations sur place si besoin.
+    retours:
+      reessayer_connexion:
+        - si: [{ chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, libres], sup: 0 }]
+          message: ipconfig /renew sur PC-LYO-0237 → il a pris une adresse en 10.20.10, il joint le domaine. Je fais les autres.
+          effets:
+            - definir: { chemin: postes.PC-LYO-0237.reseau.apipa, valeur: false }
+        - message: Toujours 169.254 après ipconfig /renew.
+  INC0031826:
+    ouvert: -9m
+    demandeur: lclement
+    poste: PC-LYO-0140
+    canal: telephone
+    priorite: P3
+    objet: Plus de réseau sur mon portable
+    description: |
+      Je rentre de dix jours de tournée clients et mon portable n'a plus de
+      réseau sur ma station d'accueil, alors que mes collègues en ont.
+    reponses:
+      depuis_quand: Ce matin. Avant mon départ, le 9, tout marchait.
+      localisation: À mon bureau, à l'agence de Lyon.
+      par_defaut: Je ne sais pas.
+    retours:
+      reessayer_connexion:
+        - si: [{ chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, libres], sup: 0 }]
+          message: J'ai débranché et rebranché, j'ai du réseau maintenant.
+          effets:
+            - definir: { chemin: postes.PC-LYO-0140.reseau.apipa, valeur: false }
+        - message: Toujours pas de réseau.
+
+monde:
+  dhcp:
+    SRV-DHCP-01:
+      etendues:
+        10.20.10.0:
+          occupation: ~
+          baux:
+            - { generer: { nombre: 42, nom: "PC-LYO-{n:04}", n_debut: 43, expire: [+2j, +7j], hors_ligne: true, note: Anciens postes remplacés (CHG0004610) } }
+            - { generer: { nombre: 36, nom: "PC-LYO-{n:04}", n_debut: 201, expire: [+5j, +8j] } }
+            - { generer: { nombre: 104, nom: "PC-LYO-{n:04}", n_debut: 300, expire: [+1j, +8j], note: Postes et équipements en service } }
+            - { postes: [PC-LYO-0003, PC-LYO-0009, PC-LYO-0118, PC-LYO-0121, PC-LYO-0133, PC-LYO-0142, PC-LYO-0151, PC-LYO-0160] }
+  postes:
+    PC-LYO-0140:
+      reseau: { ip: ~, apipa: true, adresse_auto: 169.254.188.40/16, mac: 02-56-4C-20-01-40, bail_expire: -2j }
+      journaux:
+        - evenement: dhcp-client/1001
+          t: -12m
+          repeter: { intervalle: 5m, jusqu_a: -1m }
+          donnees: { mac: 02564C200140 }
+    PC-LYO-0237:
+      <<: &poste_neuf
+        site: Lyon
+        ou: OU=Postes,OU=Lyon
+        socle: W11-23H2-v2025.03
+        description: Renouvellement CHG0004610
+      reseau: { ip: ~, apipa: true, adresse_auto: 169.254.71.12/16, mac: 02-56-4C-20-02-37 }
+      journaux:
+        - evenement: dhcp-client/1001
+          ref: apipa_neuf
+          t: -1h05m
+          repeter: { intervalle: 5m, jusqu_a: -1m }
+          donnees: { mac: 02564C200237 }
+    PC-LYO-0238: { <<: *poste_neuf, reseau: { ip: ~, apipa: true, adresse_auto: 169.254.19.201/16, mac: 02-56-4C-20-02-38 } }
+    PC-LYO-0239: { <<: *poste_neuf, reseau: { ip: ~, apipa: true, adresse_auto: 169.254.140.7/16, mac: 02-56-4C-20-02-39 } }
+    PC-LYO-0240: { <<: *poste_neuf, reseau: { ip: ~, apipa: true, adresse_auto: 169.254.233.90/16, mac: 02-56-4C-20-02-40 } }
+    PC-LYO-0241: { <<: *poste_neuf, reseau: { ip: ~, apipa: true, adresse_auto: 169.254.5.166/16, mac: 02-56-4C-20-02-41 } }
+    PC-LYO-0242: { <<: *poste_neuf, reseau: { ip: ~, apipa: true, adresse_auto: 169.254.98.31/16, mac: 02-56-4C-20-02-42 } }
+  serveurs:
+    SRV-DHCP-01:
+      fichiers:
+        'C:\Windows\System32\dhcp\DhcpSrvLog-Jeu.log':
+          taille: 1.2Mo
+          modifie: -1m
+          contenu: |
+            ID,Date,Heure,Description,Adresse IP,Nom d'hôte,Adresse MAC
+            11,11/19/26,07:58:02,Renouvellement,10.20.10.61,PC-LYO-0121.vellane.local,02564C200121
+            14,11/19/26,07:35:12,Plage d'adresses épuisée pour l'étendue 10.20.10.0,,PC-LYO-0237,02564C200237
+            14,11/19/26,07:41:30,Plage d'adresses épuisée pour l'étendue 10.20.10.0,,PC-LYO-0238,02564C200238
+            14,11/19/26,08:29:47,Plage d'adresses épuisée pour l'étendue 10.20.10.0,,PC-LYO-0140,02564C200140
+            14,11/19/26,08:38:15,Plage d'adresses épuisée pour l'étendue 10.20.10.0,,PC-LYO-0241,02564C200241
+      journaux:
+        - evenement: dhcp-serveur/1020
+          ref: seuil_90
+          t: -1j18h
+          donnees: { etendue: 10.20.10.0, pourcentage: "90", restantes: "19" }
+        - evenement: dhcp-serveur/1020
+          t: -15h30m
+          donnees: { etendue: 10.20.10.0, pourcentage: "100", restantes: "0" }
+        - evenement: dhcp-serveur/1063
+          ref: plus_d_adresse
+          t: -15h28m
+          repeter: { intervalle: 30m, jusqu_a: -2m }
+          donnees: { etendue: 10.20.10.0 }
+  changements:
+    CHG0004610:
+      titre: Renouvellement du parc de Lyon (42 postes)
+      date: -3j
+      auteur: kleroy
+      contenu: >
+        Du 16 au 20/11 : remplacement de PC-LYO-0043 à PC-LYO-0084 par
+        PC-LYO-0201 à PC-LYO-0242 (même modèle, socle W11-23H2-v2025.03).
+        Anciens postes éteints et stockés en salle 0.12, reprise par le
+        prestataire le 27/11. Prérequis réseau : aucun.
+
+indices:
+  apipa:
+    description: Les postes neufs ont une adresse d'autoconfiguration 169.254.x.x et journalisent Dhcp-Client 1001 toutes les 5 minutes.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { action: machine.reseau.lire, cible: [PC-LYO-0237, PC-LYO-0238, PC-LYO-0140] }
+      - { evenement: apipa_neuf }
+      - { question: message_exact, ticket: INC0031820 }
+  etendue_pleine:
+    description: "Étendue 10.20.10.0 (LYO-Postes) : 190 adresses utilisées sur 190, 0 libre ; les autres étendues ont de la marge."
+    categorie: diagnostic
+    points: 10
+    revele_par:
+      - { action: dhcp.etendue.lire, cible: SRV-DHCP-01 }
+  evenements_dhcp:
+    description: DHCP 1020 (90 % puis 100 %) depuis mardi et 1063 (aucune adresse disponible) depuis hier soir ; journal d'audit avec l'ID 14 (plage épuisée).
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { evenement: plus_d_adresse }
+      - { evenement: seuil_90 }
+      - { action: machine.fichiers.lire, cible: SRV-DHCP-01, parametres: { chemin: 'C:\Windows\System32\dhcp\DhcpSrvLog-Jeu.log' } }
+  baux_anciens_postes:
+    description: 42 baux actifs appartiennent à PC-LYO-0043 à PC-LYO-0084, les postes remplacés, injoignables (expiration dans 2 à 7 jours).
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: dhcp.baux.lire, cible: SRV-DHCP-01 }
+  renouvellement:
+    description: CHG0004610 liste les anciens postes et confirme qu'ils sont éteints jusqu'au 27/11.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { action: document.consulter, cible: CHG0004610 }
+      - { question: changement_recent, ticket: INC0031820 }
+  prise_ok:
+    description: Le portable du technicien, qui a un bail, obtient le réseau sur la même prise ; câblage et commutateur hors de cause.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { question: deja_essaye, ticket: INC0031820 }
+  meme_modele_ok:
+    description: Les 36 postes neufs du même modèle et du même master fonctionnent ; ni pilote ni master en cause.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { question: collegues, ticket: INC0031820 }
+  dhcp_actif:
+    description: Le service DHCP tourne et les étendues de Paris et Nantes distribuent des baux normalement.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { action: machine.services.lire, cible: SRV-DHCP-01 }
+      - { action: dhcp.etendue.lire, cible: SRV-DHCP-01 }
+
+fausses_pistes:
+  cablage:
+    description: Câbles, prises ou VLAN des bureaux neufs.
+    pourquoi_credible: Les postes neufs sont dans des bureaux réaménagés.
+    eliminee_par: [prise_ok]
+    actions_inutiles:
+      - { action: equipe.contacter, cible: Reseau, si: [{ indice: etendue_pleine, revele: false }] }
+    penalite: -5
+  pilote_reseau:
+    description: Le pilote réseau du nouveau modèle ou le master.
+    pourquoi_credible: Les postes sont neufs.
+    eliminee_par: [meme_modele_ok]
+    actions_inutiles:
+      - { action: machine.logiciel.installer, cible: [PC-LYO-0237, PC-LYO-0238, PC-LYO-0239, PC-LYO-0240, PC-LYO-0241, PC-LYO-0242] }
+    penalite: -5
+  serveur_dhcp_hs:
+    description: Le serveur DHCP serait arrêté.
+    pourquoi_credible: Aucun poste neuf n'obtient de bail.
+    eliminee_par: [dhcp_actif]
+    actions_inutiles:
+      - { action: [machine.service.redemarrer, machine.redemarrer], cible: SRV-DHCP-01 }
+    penalite: -10
+
+pieges:
+  exclusion_supprimee:
+    description: Supprimer ou réduire l'exclusion 10.20.10.200 à .250 pour agrandir le pool.
+    declencheur: { action: dhcp.exclusion.modifier, cible: SRV-DHCP-01, parametres: { etendue: 10.20.10.0, operation: supprimer } }
+    penalite: -15
+    effets:
+      - ticket:
+          id: INC0031839
+          ouvert: +20m
+          demandeur: fmorel
+          poste: PC-LYO-0160
+          canal: telephone
+          priorite: P2
+          objet: Le copieur du rez-de-chaussée ne répond plus
+          description: Le copieur LYO-RDC affiche « conflit d'adresse IP » et plus personne n'imprime.
+    retour: >
+      La plage exclue contient les adresses fixes des copieurs, des bornes
+      Wi-Fi et des badgeuses. Le serveur les distribuerait à des postes :
+      conflits d'adresses assurés.
+  ip_fixe_sur_postes:
+    description: Configurer une adresse IP fixe sur les postes neufs.
+    declencheur: { action: machine.reseau.configurer, cible: [PC-LYO-0237, PC-LYO-0238, PC-LYO-0239, PC-LYO-0240, PC-LYO-0241, PC-LYO-0242, PC-LYO-0140] }
+    penalite: -10
+    retour: Une adresse fixe prise dans le pool sera un jour distribuée à un autre poste ; le conflit reviendra plus tard, plus difficile à trouver.
+
+actions_dangereuses:
+  suppression_de_tous_les_baux:
+    description: Supprimer tous les baux de l'étendue.
+    declencheur: { action: dhcp.bail.supprimer, cible: SRV-DHCP-01, parametres: { etendue: 10.20.10.0, tous: true } }
+    penalite: -30
+    gravite: majeure
+    effets:
+      - ticket:
+          id: INC0031841
+          ouvert: +35m
+          demandeur: ogautier
+          poste: PC-LYO-0121
+          canal: portail
+          priorite: P2
+          objet: Conflit d'adresse IP
+          description: Windows signale un conflit d'adresse IP et je perds le réseau toutes les cinq minutes. Mathieu aussi.
+    retour: >
+      Le serveur oublie 148 baux encore utilisés par des postes allumés et
+      redistribue leurs adresses : conflits sur toute l'agence. On supprime
+      les baux des postes identifiés comme éteints et remplacés, un par un ou
+      par liste.
+  suppression_etendue:
+    description: Supprimer l'étendue pour la recréer.
+    declencheur: { action: dhcp.etendue.supprimer, cible: SRV-DHCP-01 }
+    penalite: -40
+    gravite: critique
+    fin_scenario: true
+    retour: Toute l'agence perd ses baux et ses options au fil des renouvellements ; la recréation à la main oublie les exclusions et options.
+
+resolution:
+  conditions:
+    - { chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, libres], sup: 6 }
+    - { chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, exclusions], egal: [[10.20.10.200, 10.20.10.250]] }
+    - { chemin: postes.PC-LYO-0237.reseau.apipa, egal: false }
+    - { chemin: postes.PC-LYO-0140.reseau.apipa, egal: false }
+  etapes:
+    baux_liberes:
+      description: Baux des anciens postes (éteints, remplacés) supprimés.
+      points: 12
+      valide_par:
+        - action: dhcp.bail.supprimer
+          cible: SRV-DHCP-01
+          parametres: { etendue: 10.20.10.0, tous: [false, ~] }
+          si: [{ chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, libres], sup: 6 }]
+    postes_neufs:
+      description: Les six postes neufs ont obtenu une adresse (renouvellement demandé au technicien ou nouvelle tentative automatique).
+      points: 8
+      valide_par:
+        - si:
+            - { chemin: postes.PC-LYO-0237.reseau.apipa, egal: false }
+            - { chemin: postes.PC-LYO-0242.reseau.apipa, egal: false }
+    portable_commerciale:
+      description: Le portable de Lucie Clément a retrouvé le réseau (même cause, second ticket).
+      points: 5
+      valide_par:
+        - si: [{ chemin: postes.PC-LYO-0140.reseau.apipa, egal: false }]
+    marge_durable:
+      description: Marge préservée jusqu'à la fin du renouvellement (durée de bail réduite à 1 ou 2 jours) ou demande d'agrandissement du sous-réseau à l'équipe réseau.
+      points: 5
+      valide_par:
+        - si: [{ chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, duree_bail], inf: 3j }]
+        - action: equipe.contacter
+          cible: Reseau
+          si: [{ indice: etendue_pleine }]
+
+communication:
+  cloture:
+    ticket: INC0031820
+    elements:
+      cause:
+        description: Cause (étendue LYO-Postes saturée par les baux des anciens postes).
+        mots_cles: [étendue, saturée, pleine, 100 %, baux]
+        points: 4
+      action:
+        description: Actions (baux des anciens postes supprimés, durée de bail réduite).
+        mots_cles: [supprim, anciens postes, durée de bail]
+        points: 4
+      suivi:
+        description: Suivi (remettre la durée de bail après le renouvellement, dimensionner le sous-réseau, prévoir l'étape DHCP dans les renouvellements).
+        mots_cles: [remettre, 8 jours, agrandir, sous-réseau, /23, procédure]
+        points: 4
+  actions:
+    tickets_lies:
+      description: Les deux tickets rattachés à la même cause.
+      points: 3
+      valide_par:
+        - { action: ticket.lier, parametres: { tickets: { inclut: [INC0031820, INC0031826] } } }
+
+escalade:
+  equipes: [N2-Systemes]
+  delai_cible: 10m
+  indices_attendus:
+    N1: [apipa, prise_ok, meme_modele_ok, renouvellement]
+  note:
+    elements:
+      symptome:
+        description: Adresse 169.254, pas de bail.
+        mots_cles: [169.254, APIPA, autoconfiguration, pas d'adresse]
+        points: 6
+      perimetre:
+        description: Six postes neufs et un portable de retour de déplacement.
+        mots_cles: [6 postes, six postes, PC-LYO-0237, Clément, portable]
+        points: 8
+      essais:
+        description: Câbles, prises, ipconfig /renew déjà essayés.
+        mots_cles: [câble, prise, renew]
+        points: 6
+      elimination:
+        description: Les 36 autres postes neufs fonctionnent ; le portable du technicien marche sur la même prise.
+        mots_cles: [36, même modèle, même prise]
+        points: 5
+      contexte:
+        description: Renouvellement de parc en cours.
+        mots_cles: [renouvellement, CHG0004610]
+        points: 5
+
+debrief:
+  - 169.254.x.x veut dire « aucun serveur DHCP n'a répondu avec une adresse », pas « câble débranché ».
+  - Quand les anciens postes ne sont pas encore rendus, un renouvellement de parc double temporairement le besoin d'adresses.
+  - Les exclusions protègent des adresses fixes ; les retirer crée des conflits.
+  - On supprime des baux identifiés (postes éteints et remplacés), jamais tous les baux d'une étendue.
+  - Deux tickets d'apparence différente (postes neufs, portable de retour) peuvent avoir la même cause.

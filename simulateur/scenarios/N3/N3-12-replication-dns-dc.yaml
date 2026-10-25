@@ -1,0 +1,549 @@
+schema: scenario/1
+id: N3-12
+titre: Modifications AD non visibles sur un site distant, réplication en échec (DNS mal configuré sur un DC)
+niveau: N3
+temps_cible: 50m
+environnement: vellane
+horloge: 2026-11-23T09:20:00+01:00
+competences: [replication, repadmin, dns_des_dc, divergence_entre_dc, ordre_des_actions, multi_tickets]
+
+resume: >
+  Trois tickets de Nantes sans lien apparent : un nouvel arrivant inconnu, un
+  ajout de groupe sans effet, une GPO d'imprimante absente. DC-NTE-01 ne
+  reçoit plus aucune réplication depuis le 17/11 (erreur 8524) : sa nouvelle
+  carte réseau virtuelle pointe vers le routeur du site et 8.8.8.8 au lieu des
+  DNS de l'annuaire. Piège central : ce matin, un technicien N1 a recréé à la
+  main le compte du nouvel arrivant sur DC-NTE-01. La prochaine réplication
+  planifiée (10:42), ou une réplication forcée, propagera ce doublon. Il faut
+  le supprimer sur DC-NTE-01 avant de rétablir la réplication.
+cause_racine: >
+  CHG0004633 (mardi 17/11, 19:00) : migration des VM de Nantes vers HV-NTE-02
+  avec une nouvelle carte réseau, configurée avec le profil réseau du site
+  (DNS 10.30.1.1 et 8.8.8.8). DC-NTE-01 ne résout plus les CNAME
+  <guid>._msdcs.vellane.local de ses partenaires : réplication entrante en
+  échec 8524 sur les cinq partitions, SYSVOL (DFSR) aussi. La réplication
+  sortante, initiée par DC-PAR-01 avec son propre DNS, fonctionne.
+
+tickets:
+  INC0031901:
+    ouvert: -40m
+    demandeur: blefevre
+    poste: PC-NTE-0050
+    canal: telephone
+    priorite: P2
+    objet: Nouvel arrivant sans accès
+    description: |
+      Notre nouveau commercial, Yanis Chevalier, arrivé ce matin, ne peut pas
+      ouvrir de session : « Nom d'utilisateur ou mot de passe incorrect ». Les
+      RH disent que son compte a été créé vendredi.
+    historique:
+      - { t: -28m, auteur: lduval, texte: "Compte introuvable dans la console (connectée à DC-NTE-01). Compte ychevalier recréé dans OU=Utilisateurs,OU=Nantes, mot de passe provisoire donné au manager. L'utilisateur est connecté sur PC-NTE-0070. Groupes à revoir avec les RH : ticket laissé ouvert." }
+    reponses:
+      depuis_quand: Depuis son arrivée ce matin à 8 h 30.
+      changement_recent: Le technicien lui a recréé un compte, il est connecté maintenant, mais il n'a pas accès à l'application commerciale.
+      collegues: Les anciens de l'agence se connectent normalement.
+      par_defaut: Je n'en sais pas plus.
+  INC0031904:
+    ouvert: -22m
+    demandeur: ccolin
+    poste: PC-NTE-0055
+    canal: portail
+    priorite: P3
+    objet: "Toujours pas de lecteur K: (Qualité)"
+    description: |
+      J'ai été ajoutée au groupe Qualité mercredi (INC0031612), mais je n'ai
+      toujours pas le lecteur K:. J'ai fermé ma session plusieurs fois.
+    historique:
+      - { t: -5j, auteur: lduval, texte: "INC0031612 : ccolin ajoutée à GG_Qualite_Nantes (validation de B. Lefèvre). Fermeture de session demandée." }
+    reponses:
+      deja_essaye: J'ai fermé et rouvert ma session trois fois, et redémarré.
+      collegues: Ma collègue de Paris, qui est dans le même groupe, a bien K:.
+      par_defaut: Je ne sais pas.
+    retours:
+      fermer_session:
+        - si: [{ chemin: postes.PC-NTE-0055.sessions.ccolin.lecteurs, contient: K }]
+          message: "J'ai enfin le lecteur K: !"
+        - message: Toujours pas de K:.
+  INC0031907:
+    ouvert: -14m
+    demandeur: blefevre
+    poste: PC-NTE-0050
+    canal: portail
+    priorite: P3
+    objet: Nouvelle imprimante du 2e non installée
+    description: |
+      La nouvelle imprimante du 2e étage (NTE-ETAGE2-COPIEUR) devait arriver
+      sur nos postes jeudi par la stratégie de groupe. Personne ne l'a.
+    reponses:
+      deja_essaye: On a tous redémarré vendredi.
+      par_defaut: Je ne sais pas.
+
+monde:
+  utilisateurs:
+    ychevalier:
+      nom: Yanis Chevalier
+      matricule: V03070
+      service: Commercial
+      fonction: Commercial terrain
+      site: Nantes
+      ou: OU=Utilisateurs,OU=Nantes
+      poste: PC-NTE-0070
+      manager: blefevre
+      groupes: [GG_Tous_Nantes, GG_Commerciaux]
+      mdp: { dernier_changement: -2j17h15m, version: 1, changer_a_la_connexion: true }
+      guid: 7c3e91a4-58d2-4f0b-9e16-2ab4d07c5f83
+      origine: DC-PAR-01
+      cree: -2j17h15m
+      cree_par: svc-arrivees
+    ychevalier~NTE:
+      sam: ychevalier
+      nom: Yanis Chevalier
+      site: Nantes
+      ou: OU=Utilisateurs,OU=Nantes
+      groupes: [GG_Tous_Nantes]
+      mdp: { dernier_changement: -28m, version: 2 }
+      guid: d41b07e2-9a63-4c5e-8f20-6e7a13c9b4d1
+      origine: DC-NTE-01
+      cree: -28m
+      cree_par: adm-lduval
+    svc-arrivees: { nom: Compte de service de l'outil d'arrivée RH, ou: OU=Administration, mdp: { dernier_changement: -120j, version: 3, expire_jamais: true } }
+  modifications_ad:
+    - { objet: groupes.GG_Qualite_Nantes, operation: ajout_membre, valeur: ccolin, origine: DC-PAR-02, t: -5j, par: adm-lduval }
+  gpo:
+    GPO_C_Nantes_Imprimante_Etage2:
+      guid: "{A61C3F09-7D2E-4B58-9E04-3F8D1C6B27A5}"
+      liens: [{ cible: 'OU=Postes,OU=Nantes' }]
+      filtrage: { appliquer: [Utilisateurs authentifiés] }
+      imprimantes: ['\\SRV-IMP-01\NTE-ETAGE2-COPIEUR']
+      origine: DC-PAR-01
+      cree: -4j
+  serveurs:
+    SRV-IMP-01:
+      files_impression:
+        NTE-ETAGE2-COPIEUR: { pilote: Pilote universel PCL6, ip: 10.30.10.202 }
+  postes:
+    PC-NTE-0070:
+      site: Nantes
+      ou: OU=Postes,OU=Nantes
+      socle: W11-23H2-v2025.03
+      utilisateur_principal: ychevalier
+      reseau: { ip: 10.30.10.70/24, mac: 02-56-4C-30-00-70 }
+      sessions:
+        ychevalier~NTE: { etat: active, ouverte: -22m }
+    PC-NTE-0055:
+      sessions:
+        ccolin: { etat: active, ouverte: -25m }
+  controleurs:
+    DC-NTE-01:
+      vm: { hote: HV-NTE-02 }
+      reseau: { ip: 10.30.1.10/24, passerelle: 10.30.1.1, dns: [10.30.1.1, 8.8.8.8], carte: Ethernet 2 }
+      journaux:
+        - evenement: ntds/2087
+          ref: ev_2087
+          t: -5j13h38m
+          repeter: { intervalle: 3h, jusqu_a: -1h38m }
+          donnees: { source: DC-PAR-01, guid: 3f8e2c1a-7b4d-4e9a-9c21-5d6f0a8b1e47 }
+        - evenement: ntds/1925
+          t: -5j13h38m
+          repeter: { intervalle: 3h, jusqu_a: -1h38m }
+          donnees: { partition: 'DC=vellane,DC=local', source: DC-PAR-01, site_source: Paris-Siege, guid: 3f8e2c1a-7b4d-4e9a-9c21-5d6f0a8b1e47, erreur: L’opération DSA ne peut pas continuer en raison d’un échec de recherche DNS., code: "8524 (0x214C)" }
+        - evenement: ntds/1864
+          t: -4j12h
+          repeter: { intervalle: 1j, jusqu_a: -12h }
+          donnees: { partition: 'DC=vellane,DC=local', nb_tous: "1", nb_site: "0" }
+        - evenement: dfsr/5002
+          ref: dfsr_nte
+          t: -5j13h30m
+          repeter: { intervalle: 6h, jusqu_a: -1h }
+          donnees: { partenaire: DC-PAR-01, erreur: "1722 (Le serveur RPC n’est pas disponible.)" }
+        - evenement: netlogon/5774
+          ref: netlogon_5774
+          t: -5j13h40m
+          repeter: { intervalle: 1j, jusqu_a: -2h }
+          donnees: { enregistrement: "_ldap._tcp.Nantes._sites.dc._msdcs.vellane.local. 600 IN SRV 0 100 389 DC-NTE-01.vellane.local.", serveur: 10.30.1.1, code: "9005" }
+        - evenement: securite/4720
+          ref: creation_doublon
+          t: -28m
+          donnees: { auteur: adm-lduval, compte: ychevalier }
+    DC-PAR-01:
+      journaux:
+        - evenement: securite/4720
+          ref: creation_originale
+          t: -2j17h15m
+          donnees: { auteur: svc-arrivees, compte: ychevalier }
+  replication:
+    connexions:
+      DC-NTE-01:
+        DC-PAR-01:
+          derniere_tentative: -1h38m
+          derniere_reussite: -5j16h38m
+          premier_echec: -5j13h38m
+          erreur: 8524
+          echecs_consecutifs: 45
+          prochaine: +1h22m
+      DC-PAR-01:
+        DC-NTE-01:
+          derniere_tentative: -1h38m
+          derniere_reussite: -1h38m
+          erreur: 0
+          prochaine: +1h22m
+  changements:
+    CHG0004633:
+      titre: Migration des VM de Nantes vers l'hôte HV-NTE-02
+      date: -5j14h20m
+      auteur: Virtualisation
+      contenu: >
+        Mardi 17/11 de 19 h à 21 h 30 : migration de DC-NTE-01 vers HV-NTE-02,
+        remplacement de la carte réseau virtuelle (Ethernet 2), application du
+        profil réseau du site de Nantes. Tests : ping de la passerelle et des DC
+        de Paris OK. Statut : terminé avec succès.
+    INC0030990:
+      titre: Coupure du lien opérateur de Nantes (clos)
+      date: -7j
+      contenu: Lundi 16/11, coupure du lien WAN de Nantes de 10 h 05 à 12 h 10, rétablie par l'opérateur. Clos.
+  virtualisation:
+    hotes:
+      HV-NTE-01: { site: Nantes, cluster: null, vms: [] }
+      HV-NTE-02: { site: Nantes, cluster: null, vms: [DC-NTE-01] }
+
+contacts:
+  Virtualisation:
+    - si: [{ indice: dns_client_dc }]
+      reponse: >
+        Oui, à la migration on a appliqué le profil réseau standard du site
+        (DNS du routeur, puis 8.8.8.8). On n'avait pas de profil spécifique
+        pour les contrôleurs de domaine. On corrige le modèle de notre côté.
+      revele: [changement_vm]
+    - reponse: La migration de mardi s'est bien passée, la VM répond au ping. Qu'est-ce que vous constatez exactement ?
+
+dynamiques:
+  replication_planifiee:
+    description: >
+      À 10:42, réplication intersite planifiée dans les deux sens. Si le
+      doublon existe encore sur DC-NTE-01, il part vers Paris (et, si le DNS a
+      été corrigé, l'original arrive à Nantes) : deux comptes ychevalier dans
+      le domaine.
+    quand: { a: +1h22m }
+    si:
+      - { chemin: utilisateurs.ychevalier~NTE.existe, egal: true }
+    effets:
+      - definir: { chemin: utilisateurs.ychevalier.conflit_sam, valeur: true }
+      - evenement: { machine: DC-PAR-01, evenement: kdc/11, donnees: { nom: ychevalier, type: 1 } }
+      - evenement: { machine: DC-PAR-02, evenement: kdc/11, donnees: { nom: ychevalier, type: 1 } }
+      - ticket:
+          id: INC0031931
+          ouvert: +5m
+          demandeur: blefevre
+          poste: PC-NTE-0050
+          canal: telephone
+          priorite: P1
+          objet: Yanis Chevalier ne peut plus se connecter du tout
+          description: Depuis 10 h 45, plus moyen pour Yanis de se connecter, et les RH voient deux « Yanis Chevalier » dans leur outil.
+
+indices:
+  echec_8524:
+    description: "repadmin /replsummary : DC-NTE-01 échoue 5/5 en entrée, erreur 8524, plus grand delta 5 j 16 h ; dernière réussite le 17/11 à 16:42, premier échec à 19:42, au redémarrage qui suit la migration."
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: ad.replication.lire }
+      - { action: ad.dc.diagnostiquer, cible: DC-NTE-01 }
+  ev_2087:
+    description: "NTDS 2087 et 1925 sur DC-NTE-01 : impossible de résoudre 3f8e2c1a-...._msdcs.vellane.local (DC-PAR-01)."
+    categorie: diagnostic
+    points: 3
+    revele_par:
+      - { evenement: ev_2087 }
+  dns_client_dc:
+    description: La carte « Ethernet 2 » de DC-NTE-01 utilise 10.30.1.1 et 8.8.8.8 comme serveurs DNS.
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: machine.reseau.lire, cible: DC-NTE-01 }
+  resolution_echoue:
+    description: Depuis DC-NTE-01, la résolution des CNAME _msdcs des partenaires échoue (nom inexistant) ; dcdiag /test:dns signale le DNS du client.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { action: machine.dns.resoudre, cible: DC-NTE-01 }
+      - { action: ad.dc.diagnostiquer, cible: DC-NTE-01, parametres: { test: dns } }
+      - { evenement: netlogon_5774 }
+  changement_vm:
+    description: CHG0004633 a remplacé la carte réseau de DC-NTE-01 le 17/11 à 19 h, juste avant la première erreur.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { action: document.consulter, cible: CHG0004633 }
+  recreation_n1:
+    description: Un technicien N1 a recréé le compte ychevalier ce matin, sur DC-NTE-01.
+    categorie: diagnostic
+    points: 0
+    revele_par:
+      - { action: ticket.lire, cible: INC0031901 }
+  lien_tickets:
+    description: Les trois tickets de Nantes ont la même cause (objets créés ou modifiés à Paris après le 17/11 absents de DC-NTE-01).
+    categorie: correlation
+    points: 6
+    revele_par:
+      - { action: ticket.lier, parametres: { tickets: { inclut: [INC0031901, INC0031904, INC0031907] } } }
+  doublon_ychevalier:
+    description: Deux objets ychevalier différents (GUID, date et auteur de création) selon le DC interrogé ; l'original n'est pas sur DC-NTE-01, le doublon n'est pas encore à Paris.
+    categorie: correlation
+    points: 5
+    revele_par:
+      - { action: ad.utilisateur.lire, cible: ychevalier, parametres: { dc: DC-NTE-01 } }
+      - { evenement: creation_doublon }
+  asymetrie:
+    description: DC-PAR-01 réplique sans erreur depuis DC-NTE-01 ; seul le sens entrant vers Nantes échoue, ce qui désigne la résolution DNS de DC-NTE-01.
+    categorie: correlation
+    points: 4
+    revele_par:
+      - { action: ad.replication.lire, cible: DC-PAR-01 }
+      - { action: ad.replication.lire, parametres: { vue: resume } }
+  lien_wan_ok:
+    description: Test-NetConnection de DC-NTE-01 vers DC-PAR-01 (135, 389, 445) réussit ; la coupure WAN du 16/11 est close.
+    categorie: elimination
+    points: 4
+    revele_par:
+      - { action: machine.test_port, cible: DC-NTE-01 }
+      - { action: machine.ping, cible: DC-NTE-01, parametres: { destination: [10.10.1.10, 10.10.1.11] } }
+  pas_un_delai:
+    description: L'intervalle intersite est de 3 h ; un delta de plus de 5 jours n'est pas un simple délai.
+    categorie: elimination
+    points: 3
+    revele_par:
+      - { action: ad.replication.lire }
+  dc_fonctionnel:
+    description: DC-NTE-01 authentifie normalement les comptes anciens ; ses services tournent ; seuls le DNS client et la réplication sont en défaut.
+    categorie: elimination
+    points: 3
+    revele_par:
+      - { action: machine.services.lire, cible: DC-NTE-01 }
+      - { action: ad.dc.diagnostiquer, cible: DC-NTE-01 }
+
+fausses_pistes:
+  lien_wan:
+    description: Le lien opérateur de Nantes (coupure du 16/11, « le réseau est lent »).
+    pourquoi_credible: Une coupure réelle a eu lieu la semaine dernière.
+    eliminee_par: [lien_wan_ok]
+    actions_inutiles:
+      - { action: equipe.contacter, cible: Reseau, si: [{ indice: lien_wan_ok, revele: false }] }
+    penalite: -5
+  attendre_la_replication:
+    description: « Il faut laisser le temps à la réplication. »
+    pourquoi_credible: L'intervalle intersite est de 3 heures.
+    eliminee_par: [pas_un_delai]
+    actions_inutiles:
+      - { action: ticket.mettre_en_attente, cible: [INC0031901, INC0031904, INC0031907] }
+    penalite: -10
+  dc_hors_service:
+    description: DC-NTE-01 serait corrompu ou à reconstruire ; l'événement 2087 suggère lui-même un nettoyage des métadonnées.
+    pourquoi_credible: Le texte de l'événement 2087 propose en premier « supprimez les métadonnées ».
+    eliminee_par: [dc_fonctionnel]
+    actions_inutiles:
+      - { action: machine.redemarrer, cible: DC-NTE-01, si: [{ indice: dns_client_dc, revele: false }] }
+    penalite: -10
+
+pieges:
+  doublon_propage_par_le_calendrier:
+    description: Laisser passer la réplication planifiée de 10:42 sans avoir supprimé le doublon.
+    declencheur: { dynamique: replication_planifiee }
+    penalite: -20
+    retour: >
+      Le doublon créé sur DC-NTE-01 part vers Paris à la réplication planifiée
+      (et l'original arrive à Nantes si le DNS est corrigé) : deux objets avec
+      le même sAMAccountName, CN renommé en CNF:, KDC 11, plus aucune
+      connexion possible pour le nouvel arrivant. Les tickets se lisent en
+      entier, historique compris, avant d'agir.
+  dns_externe_conserve:
+    description: Clôturer avec un DNS externe ou le routeur encore configuré sur DC-NTE-01.
+    declencheur:
+      action: ticket.cloturer
+      si:
+        - { chemin: controleurs.DC-NTE-01.reseau.dns, contient_un: [8.8.8.8, 10.30.1.1] }
+    penalite: -10
+    retour: Un contrôleur de domaine n'interroge que des DNS de l'annuaire (un partenaire d'abord, lui-même ensuite) ; un DNS externe en secondaire refera échouer la réplication au premier délai.
+  redemarrage_sans_diagnostic:
+    description: Redémarrer DC-NTE-01 avant d'avoir regardé sa configuration réseau.
+    declencheur:
+      action: machine.redemarrer
+      cible: DC-NTE-01
+      si: [{ indice: dns_client_dc, revele: false }]
+    penalite: -10
+    retour: Nantes perd son DC pendant le redémarrage, et rien ne change.
+  hosts_sur_dc:
+    description: Ajouter les DC de Paris dans le fichier hosts de DC-NTE-01.
+    declencheur:
+      action: machine.fichiers.modifier
+      cible: DC-NTE-01
+      parametres: { chemin: 'C:\Windows\System32\drivers\etc\hosts' }
+    penalite: -10
+    retour: Le fichier hosts ne résout pas les CNAME _msdcs et masque la vraie erreur.
+
+actions_dangereuses:
+  forcer_avec_doublon:
+    description: Forcer la réplication (repadmin /syncall, /replicate, Répliquer maintenant) tant que le doublon existe.
+    declencheur:
+      action: ad.replication.forcer
+      si: [{ chemin: utilisateurs.ychevalier~NTE.existe, egal: true }]
+    penalite: -45
+    gravite: majeure
+    effets:
+      - definir: { chemin: utilisateurs.ychevalier.conflit_sam, valeur: true }
+      - evenement: { machine: DC-PAR-01, evenement: kdc/11, donnees: { nom: ychevalier, type: 1 } }
+    retour: >
+      Forcer la réplication sans diagnostic complet propage ce qui a divergé
+      pendant cinq jours, y compris le compte recréé à la main. On répare
+      d'abord ce qui ne doit pas être répliqué, puis on rétablit la
+      réplication.
+  retrait_du_dc:
+    description: Rétrograder de force DC-NTE-01 ou nettoyer ses métadonnées, comme le suggère l'événement 2087.
+    declencheur: { action: ad.dc.retirer, cible: DC-NTE-01 }
+    penalite: -60
+    gravite: critique
+    fin_scenario: true
+    retour: Le DC est sain ; seul son client DNS est faux. Le retirer prive Nantes de son DC et de son DNS, et les objets créés localement depuis le 17 sont perdus.
+  coherence_stricte:
+    description: Désactiver la cohérence stricte de la réplication ou autoriser la réplication avec un partenaire divergent.
+    declencheur: { action: ad.replication.parametres.modifier }
+    penalite: -40
+    gravite: majeure
+    retour: Ces options servent à réintroduire des objets persistants ; elles n'ont rien à voir avec une erreur DNS et ouvrent la porte à la corruption de l'annuaire.
+  suppression_de_l_original:
+    description: Supprimer le compte ychevalier sur un DC de Paris ou de Lyon (le compte créé par les RH).
+    declencheur:
+      action: ad.utilisateur.supprimer
+      cible: ychevalier
+      parametres: { dc: [DC-PAR-01, DC-PAR-02, DC-LYO-01, ~] }
+    penalite: -40
+    gravite: majeure
+    effets:
+      - definir: { chemin: utilisateurs.ychevalier.existe, valeur: false }
+    retour: C'est le compte créé par l'outil d'arrivée, avec ses groupes et sa boîte aux lettres ; le doublon à supprimer est celui de DC-NTE-01.
+  restauration_autoritaire:
+    description: Lancer une restauration autoritaire (annuaire ou SYSVOL).
+    declencheur: { action: ad.restauration_autoritaire }
+    penalite: -50
+    gravite: critique
+    retour: Rien n'a été supprimé à tort ; une restauration autoritaire écraserait cinq jours de modifications légitimes.
+  reinitialisation_en_masse:
+    description: Réinitialiser les mots de passe des utilisateurs de Nantes.
+    declencheur: { action: ad.utilisateurs.reinitialiser_en_masse }
+    penalite: -50
+    gravite: critique
+    retour: Aucun mot de passe n'est en cause ; toute l'agence serait bloquée en plus.
+
+resolution:
+  conditions:
+    - { chemin: utilisateurs.ychevalier~NTE.existe, egal: false }
+    - { chemin: utilisateurs.ychevalier.existe, egal: true }
+    - { chemin: controleurs.DC-NTE-01.reseau.dns, ne_contient_pas: 8.8.8.8 }
+    - { chemin: controleurs.DC-NTE-01.reseau.dns, ne_contient_pas: 10.30.1.1 }
+    - { chemin: [replication, connexions, DC-NTE-01, DC-PAR-01, erreur], egal: 0 }
+  etapes:
+    doublon_supprime:
+      description: Doublon ychevalier supprimé sur DC-NTE-01 avant toute réplication.
+      points: 6
+      valide_par:
+        - action: ad.utilisateur.supprimer
+          cible: ychevalier
+          parametres: { dc: DC-NTE-01 }
+          si: [{ chemin: utilisateurs.ychevalier.conflit_sam, different: true }]
+    dns_corrige:
+      description: DNS de DC-NTE-01 corrigé (un DC de Paris en premier, lui-même ensuite, aucun DNS externe).
+      points: 6
+      valide_par:
+        - si:
+            - { chemin: controleurs.DC-NTE-01.reseau.dns, contient_un: [10.10.1.10, 10.10.1.11] }
+            - { chemin: controleurs.DC-NTE-01.reseau.dns, ne_contient_pas: 8.8.8.8 }
+            - { chemin: controleurs.DC-NTE-01.reseau.dns, ne_contient_pas: 10.30.1.1 }
+    enregistrements_dc:
+      description: Enregistrements du DC réinscrits (ipconfig /registerdns, redémarrage du service Netlogon).
+      points: 2
+      valide_par:
+        - action: [machine.dns.enregistrer, machine.service.redemarrer]
+          cible: DC-NTE-01
+          si: [{ chemin: controleurs.DC-NTE-01.reseau.dns, ne_contient_pas: 10.30.1.1 }]
+    replication_relancee:
+      description: Réplication vers DC-NTE-01 relancée après le DNS corrigé et le doublon supprimé.
+      points: 5
+      valide_par:
+        - action: ad.replication.forcer
+          si:
+            - { chemin: utilisateurs.ychevalier~NTE.existe, egal: false }
+            - { chemin: controleurs.DC-NTE-01.reseau.dns, ne_contient_pas: 10.30.1.1 }
+    replication_verifiee:
+      description: repadmin /replsummary sans échec, SYSVOL rattrapé.
+      points: 6
+      valide_par:
+        - action: ad.replication.lire
+          si: [{ chemin: [replication, connexions, DC-NTE-01, DC-PAR-01, erreur], egal: 0 }]
+
+communication:
+  cloture:
+    ticket: INC0031901
+    elements:
+      cause:
+        description: Cause (DNS de la nouvelle carte de DC-NTE-01, réplication en échec 8524 depuis le 17/11).
+        mots_cles: [DNS, 8.8.8.8, carte réseau, réplication, 8524]
+        points: 3
+      action:
+        description: Actions (DNS corrigé, réplication relancée et vérifiée).
+        mots_cles: [corrigé, repadmin, réplication relancée, replsummary]
+        points: 3
+      doublon:
+        description: Doublon du nouvel arrivant supprimé ; il se connecte avec le compte des RH.
+        mots_cles: [doublon, ychevalier, compte RH, recréé]
+        points: 2
+      consignes:
+        description: Consignes aux utilisateurs (fermer la session pour le groupe, redémarrer pour l'imprimante).
+        mots_cles: [fermer la session, redémarr, reconnect]
+        points: 2
+  actions:
+    informer_nantes:
+      description: Message aux utilisateurs de Nantes.
+      points: 2
+      valide_par:
+        - { action: ticket.communiquer, parametres: { population: Nantes } }
+    prevenir_virtualisation:
+      description: L'équipe virtualisation est prévenue pour corriger son profil réseau des DC.
+      points: 3
+      valide_par:
+        - { action: equipe.contacter, cible: Virtualisation, si: [{ indice: dns_client_dc }] }
+
+escalade:
+  equipes: [N3-Infrastructure]
+  delai_cible: 15m
+  indices_attendus:
+    N1: [lien_tickets, recreation_n1]
+    N2: [lien_tickets, echec_8524, ev_2087, dns_client_dc, resolution_echoue, doublon_ychevalier, asymetrie]
+  note:
+    elements:
+      perimetre:
+        description: Site et tickets concernés.
+        mots_cles: [Nantes, trois tickets, 3 tickets, INC0031901]
+        points: 5
+      symptomes:
+        description: Ce qui n'arrive pas à Nantes (nouveau compte, groupe, GPO d'imprimante).
+        mots_cles: [nouvel arrivant, groupe, 'K:', imprimante, GPO]
+        points: 5
+      replication:
+        description: Réplication entrante de DC-NTE-01 en échec.
+        mots_cles: [réplication, 8524, DC-NTE-01, depuis le 17]
+        points: 8
+      cause:
+        description: DNS client du DC depuis la migration de VM.
+        mots_cles: [DNS, 8.8.8.8, 10.30.1.1, carte réseau, CHG0004633]
+        points: 6
+      doublon:
+        description: "Compte recréé à la main ce matin sur DC-NTE-01 : ne pas forcer la réplication avant de le traiter, réplication planifiée à 10:42."
+        mots_cles: [doublon, recréé, lduval, ne pas forcer, 10:42, 10 h 42]
+        points: 6
+
+debrief:
+  - Trois symptômes différents sur un même site avec un même âge (après le 17/11) désignent une divergence entre DC.
+  - L'erreur 8524 est une erreur DNS du DC destination ; le DNS d'un DC pointe vers des DNS de l'annuaire, jamais vers un DNS public.
+  - Une réplication à sens unique désigne la machine qui ne résout pas.
+  - Pendant une divergence, des corrections locales (compte recréé) deviennent des bombes à retardement ; on les traite avant de rétablir la réplication.
+  - Forcer une réplication, retirer un DC ou toucher à la cohérence stricte ne se fait qu'après un diagnostic complet.
+  - Le texte d'un événement liste des actions possibles, pas l'action à faire.
