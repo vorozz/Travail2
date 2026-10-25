@@ -1,0 +1,702 @@
+# Environnement de référence commun à tous les scénarios : l'entreprise
+# fictive Vellane, dans son état NORMAL. Chaque scénario y superpose son
+# incident (section `monde`, fusion décrite dans FORMAT.md).
+#
+# Conventions :
+# - Les DN sont écrits sans le suffixe du domaine (DC=vellane,DC=local est
+#   ajouté par le moteur selon le domaine de l'objet).
+# - Les dates relatives (-41j, +3h) sont comptées depuis l'horloge du
+#   scénario ; les dates absolues (2031-03-15) sont fixes.
+# - Les services Windows standard sont démarrés sauf mention contraire.
+
+schema: environnement/1
+id: vellane
+nom: Vellane
+description: >
+  Distributeur fictif de fournitures techniques, 2 400 salariés. Siège à
+  Paris, agences à Lyon et Nantes. Filiale Orbis rachetée en 2025 : forêt
+  séparée, approbation de forêt bidirectionnelle.
+fuseau: Europe/Paris
+
+apprenant:
+  compte: tech.apprenant
+  compte_admin: adm-apprenant
+  poste: PC-PAR-0020
+
+equipes:
+  N1-Support: { libelle: Centre de services (support de proximité), niveau: N1 }
+  N2-Systemes:
+    libelle: Support systèmes
+    niveau: N2
+    traite: [comptes, postes, gpo, dns, dhcp, canal_securise, horloge, partages, impression]
+  N3-Infrastructure:
+    libelle: Infrastructure (annuaire, PKI, approbations)
+    niveau: N3
+    traite: [replication, controleurs, approbations, pki, iis, incident_majeur]
+  Reseau: { libelle: Équipe réseau, traite: [lan, wan, pare_feu, vlan, relais_dhcp] }
+  Virtualisation: { libelle: Équipe virtualisation, traite: [hyperviseurs, vm] }
+  Securite: { libelle: Centre opérationnel de sécurité, traite: [attaque, compromission, antivirus] }
+  Poste-Travail: { libelle: Équipe poste de travail (socle et packaging), traite: [socle, packaging, deploiement] }
+  Proximite-Lyon: { libelle: Technicien de proximité de Lyon, contact: kleroy }
+  Orbis-IT: { libelle: Informatique d'Orbis (filiale), externe: true, traite: [orbis] }
+  Editeur-Compteo: { libelle: Support de l'éditeur de Compteo, externe: true }
+
+# --- Annuaire -----------------------------------------------------------------
+
+forets:
+  vellane.local:
+    racine: vellane.local
+    niveau_fonctionnel: Windows2016Forest
+    maitre_schema: DC-PAR-01
+    maitre_nommage: DC-PAR-01
+    duree_vie_tombstone: 180j
+  orbis.local:
+    racine: orbis.local
+    niveau_fonctionnel: Windows2012R2Forest
+    externe: true
+
+domaines:
+  vellane.local:
+    netbios: VELLANE
+    sid: S-1-5-21-3021597742-1873450312-2264317895
+    niveau_fonctionnel: Windows2016Domain
+    fsmo: { pdc: DC-PAR-01, rid: DC-PAR-01, infrastructure: DC-PAR-01 }
+    strategie_mdp:
+      longueur_min: 12
+      complexite: true
+      historique: 24
+      duree_max: 90j
+      duree_min: 1j
+    strategie_verrouillage:
+      seuil: 5
+      duree: 30m
+      fenetre_observation: 30m
+    kerberos:
+      tolerance_horloge: 5m
+      duree_ticket_utilisateur: 10h
+    pso:
+      PSO_Comptes_Sensibles:
+        priorite: 10
+        appliquee_a: [GG_PSO_Sensibles]
+        longueur_min: 14
+        complexite: true
+        historique: 24
+        duree_max: 60j
+        duree_min: 1j
+        seuil_verrouillage: 5
+        duree_verrouillage: 30m
+    ou:
+      - OU=Paris
+      - OU=Utilisateurs,OU=Paris
+      - OU=Postes,OU=Paris
+      - OU=Standard,OU=Postes,OU=Paris
+      - OU=Portables,OU=Postes,OU=Paris
+      - OU=SallesReunion,OU=Postes,OU=Paris
+      - OU=Serveurs,OU=Paris
+      - OU=Lyon
+      - OU=Utilisateurs,OU=Lyon
+      - OU=Postes,OU=Lyon
+      - OU=Nantes
+      - OU=Utilisateurs,OU=Nantes
+      - OU=Postes,OU=Nantes
+      - OU=Groupes
+      - OU=Administration
+      - OU=Desactives
+      - OU=Utilisateurs,OU=Desactives
+      - OU=Postes,OU=Desactives
+      - OU=Domain Controllers
+    conteneurs: [CN=Computers, CN=Users]
+  orbis.local:
+    netbios: ORBIS
+    externe: true
+    sid: S-1-5-21-1190245376-2813650021-3542876109
+    controleurs: [ORB-DC01, ORB-DC03]
+    fsmo: { pdc: ORB-DC01 }
+
+approbations:
+  vellane.local:
+    orbis.local:
+      type: foret
+      sens: bidirectionnel
+      transitive: true
+      authentification_selective: false
+      filtrage_sid: true
+      secret: { version: 41, dernier_changement: -12j }
+  orbis.local:
+    vellane.local:
+      type: foret
+      sens: bidirectionnel
+      transitive: true
+      authentification_selective: false
+      filtrage_sid: true
+      secret: { version: 41, dernier_changement: -12j }
+
+sites:
+  Paris-Siege:
+    sous_reseaux: [10.10.0.0/16]
+    controleurs: [DC-PAR-01, DC-PAR-02]
+  Lyon:
+    sous_reseaux: [10.20.0.0/16]
+    controleurs: [DC-LYO-01]
+  Nantes:
+    sous_reseaux: [10.30.0.0/16]
+    controleurs: [DC-NTE-01]
+
+replication:
+  partitions:
+    - DC=vellane,DC=local
+    - CN=Configuration,DC=vellane,DC=local
+    - CN=Schema,CN=Configuration,DC=vellane,DC=local
+    - DC=DomainDnsZones,DC=vellane,DC=local
+    - DC=ForestDnsZones,DC=vellane,DC=local
+  liens_de_sites:
+    PAR-LYO: { sites: [Paris-Siege, Lyon], cout: 100, intervalle: 180m }
+    PAR-NTE: { sites: [Paris-Siege, Nantes], cout: 100, intervalle: 180m }
+  # Connexions entrantes : destination -> source -> état. Un état vide
+  # reprend `etat_par_defaut`.
+  connexions:
+    DC-PAR-01: { DC-PAR-02: {}, DC-LYO-01: {}, DC-NTE-01: {} }
+    DC-PAR-02: { DC-PAR-01: {} }
+    DC-LYO-01: { DC-PAR-01: {} }
+    DC-NTE-01: { DC-PAR-01: {} }
+  etat_par_defaut:
+    derniere_tentative: -6m
+    derniere_reussite: -6m
+    erreur: 0
+    echecs_consecutifs: 0
+
+controleurs:
+  DC-PAR-01:
+    site: Paris-Siege
+    ou: OU=Domain Controllers
+    os: { nom: Windows Server 2022 Datacenter, build: 20348.2849 }
+    guid_dsa: 3f8e2c1a-7b4d-4e9a-9c21-5d6f0a8b1e47
+    catalogue_global: true
+    roles: [AD DS, DNS]
+    vm: { hote: HV-PAR-01 }
+    reseau: { ip: 10.10.1.10/24, passerelle: 10.10.1.1, dns: [10.10.1.11, 127.0.0.1] }
+    horloge: { decalage: 0s, type: NTP, source: "0.fr.pool.ntp.org,0x8 1.fr.pool.ntp.org,0x8" }
+  DC-PAR-02:
+    site: Paris-Siege
+    ou: OU=Domain Controllers
+    os: { nom: Windows Server 2022 Datacenter, build: 20348.2849 }
+    guid_dsa: a1c47e90-2d3b-4f18-8e6a-0b9d5c3f7a12
+    catalogue_global: true
+    roles: [AD DS, DNS]
+    vm: { hote: HV-PAR-02 }
+    reseau: { ip: 10.10.1.11/24, passerelle: 10.10.1.1, dns: [10.10.1.10, 127.0.0.1] }
+    horloge: { decalage: 0.2s, type: NT5DS, source: DC-PAR-01.vellane.local }
+  DC-LYO-01:
+    site: Lyon
+    ou: OU=Domain Controllers
+    os: { nom: Windows Server 2022 Standard, build: 20348.2849 }
+    guid_dsa: 6d2b9f04-c8e1-4a7d-b3f5-91e0c4a6d258
+    catalogue_global: true
+    roles: [AD DS, DNS]
+    vm: { hote: HV-LYO-01 }
+    reseau: { ip: 10.20.1.10/24, passerelle: 10.20.1.1, dns: [10.10.1.10, 127.0.0.1] }
+    horloge: { decalage: 0.4s, type: NT5DS, source: DC-PAR-01.vellane.local }
+  DC-NTE-01:
+    site: Nantes
+    ou: OU=Domain Controllers
+    os: { nom: Windows Server 2022 Standard, build: 20348.2849 }
+    guid_dsa: e7a05c3d-1f92-4b6e-a8d4-3c7b2e9f0164
+    catalogue_global: true
+    roles: [AD DS, DNS]
+    vm: { hote: HV-NTE-01 }
+    reseau: { ip: 10.30.1.10/24, passerelle: 10.30.1.1, dns: [10.10.1.10, 127.0.0.1] }
+    horloge: { decalage: 0.3s, type: NT5DS, source: DC-PAR-01.vellane.local }
+  ORB-DC01:
+    domaine: orbis.local
+    externe: true
+    site: Orbis-Siege
+    os: { nom: Windows Server 2012 R2 Standard, build: 9600 }
+    reseau: { ip: 172.16.0.10/16 }
+  ORB-DC03:
+    domaine: orbis.local
+    externe: true
+    site: Orbis-Siege
+    os: { nom: Windows Server 2022 Standard, build: 20348.2849 }
+    reseau: { ip: 172.16.0.13/16 }
+
+serveurs:
+  SRV-FIC-01:
+    site: Paris-Siege
+    ou: OU=Serveurs,OU=Paris
+    os: { nom: Windows Server 2022 Standard, build: 20348.2849 }
+    roles: [Serveur de fichiers]
+    vm: { hote: HV-PAR-01 }
+    reseau: { ip: 10.10.2.20/24, passerelle: 10.10.2.1, dns: [10.10.1.10, 10.10.1.11] }
+    partages:
+      Perso$: { chemin: 'D:\Perso', acces: { Utilisateurs du domaine: lecture } }
+      Services: { chemin: 'D:\Services', acces: { GG_Tous_Paris: modification, GG_Tous_Lyon: modification, GG_Tous_Nantes: modification } }
+      Projets_CG: { chemin: 'D:\Projets_CG', acces: { GG_CTRLGEST_Projets_RW: modification, GG_CTRLGEST_Projets_R: lecture } }
+      Archives_CG: { chemin: 'D:\Archives_CG', acces: { GG_CTRLGEST_Archives_RW: modification } }
+      Budget_Direction: { chemin: 'D:\Budget_Direction', acces: { GG_CTRLGEST_Budget_Direction: modification } }
+      RH: { chemin: 'D:\RH', acces: { GG_RH_Tous: modification } }
+      RH_Dossiers: { chemin: 'D:\RH_Dossiers', acces: { GG_RH_Dossiers_Personnel: modification } }
+      Qualite: { chemin: 'D:\Qualite', acces: { GG_Qualite_Nantes: modification } }
+  SRV-FIC-02:
+    site: Paris-Siege
+    ou: OU=Serveurs,OU=Paris
+    os: { nom: Windows Server 2022 Standard, build: 20348.2849 }
+    roles: [Serveur de fichiers]
+    vm: { hote: HV-PAR-02 }
+    reseau: { ip: 10.10.8.21/24, passerelle: 10.10.8.1, dns: [10.10.1.10, 10.10.1.11] }
+    partages:
+      Projets: { chemin: 'E:\Projets', acces: { GG_Projets_Paris: modification } }
+  SRV-IMP-01:
+    site: Paris-Siege
+    ou: OU=Serveurs,OU=Paris
+    os: { nom: Windows Server 2022 Standard, build: 20348.2849 }
+    roles: [Serveur d'impression]
+    vm: { hote: HV-PAR-01 }
+    reseau: { ip: 10.10.2.30/24, passerelle: 10.10.2.1, dns: [10.10.1.10, 10.10.1.11] }
+    files_impression:
+      PAR-2E-COPIEUR: { pilote: Pilote universel PCL6, ip: 10.10.3.21 }
+      PAR-3E-COPIEUR: { pilote: Pilote universel PCL6, ip: 10.10.3.31 }
+      LYO-RDC-COPIEUR: { pilote: Pilote universel PCL6, ip: 10.20.10.201 }
+      LYO-1E-COPIEUR: { pilote: Pilote universel PCL6, ip: 10.20.10.202 }
+      NTE-COPIEUR: { pilote: Pilote universel PCL6, ip: 10.30.10.201 }
+  SRV-WEB-01:
+    site: Paris-Siege
+    ou: OU=Serveurs,OU=Paris
+    os: { nom: Windows Server 2022 Standard, build: 20348.2849 }
+    roles: [IIS]
+    vm: { hote: HV-PAR-02 }
+    reseau: { ip: 10.10.2.40/24, passerelle: 10.10.2.1, dns: [10.10.1.10, 10.10.1.11] }
+    certificats:
+      9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40:
+        sujet: CN=intranet.vellane.local
+        san: [intranet.vellane.local, notesdefrais.vellane.local, api.vellane.local]
+        emetteur: Vellane CA Emission 01
+        modele: Serveur Web Vellane
+        debut: -21j
+        fin: +709j
+        cle_privee: true
+    iis:
+      sites:
+        Intranet:
+          liaisons:
+            - { protocole: https, port: 443, nom_hote: intranet.vellane.local, certificat: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40, sni: true }
+            - { protocole: http, port: 80, nom_hote: intranet.vellane.local, redirection: https }
+          hsts: { actif: true, max_age: 31536000 }
+        NotesDeFrais:
+          liaisons:
+            - { protocole: https, port: 443, nom_hote: notesdefrais.vellane.local, certificat: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40, sni: true }
+          hsts: { actif: true, max_age: 31536000 }
+        API:
+          liaisons:
+            - { protocole: https, port: 443, nom_hote: api.vellane.local, certificat: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40, sni: true }
+      reliure_auto_certificat: false
+  SRV-APP-01:
+    site: Paris-Siege
+    ou: OU=Serveurs,OU=Paris
+    os: { nom: Windows Server 2019 Standard, build: 17763.6532 }
+    roles: [IIS, Compteo Web]
+    vm: { hote: HV-PAR-01 }
+    reseau: { ip: 10.10.2.45/24, passerelle: 10.10.2.1, dns: [10.10.1.10, 10.10.1.11] }
+  SRV-PKI-01:
+    site: Paris-Siege
+    ou: OU=Serveurs,OU=Paris
+    os: { nom: Windows Server 2022 Standard, build: 20348.2849 }
+    roles: [Autorité de certification d'entreprise, IIS (publication des CRL)]
+    vm: { hote: HV-PAR-02 }
+    reseau: { ip: 10.10.2.50/24, passerelle: 10.10.2.1, dns: [10.10.1.10, 10.10.1.11] }
+  SRV-DHCP-01:
+    site: Paris-Siege
+    ou: OU=Serveurs,OU=Paris
+    os: { nom: Windows Server 2022 Standard, build: 20348.2849 }
+    roles: [DHCP]
+    vm: { hote: HV-PAR-01 }
+    reseau: { ip: 10.10.1.20/24, passerelle: 10.10.1.1, dns: [10.10.1.10, 10.10.1.11] }
+  SRV-DEPLOI-01:
+    site: Paris-Siege
+    ou: OU=Serveurs,OU=Paris
+    os: { nom: Windows Server 2022 Standard, build: 20348.2849 }
+    roles: [Déploiement logiciel, Point de distribution]
+    vm: { hote: HV-PAR-02 }
+    reseau: { ip: 10.10.2.60/24, passerelle: 10.10.2.1, dns: [10.10.1.10, 10.10.1.11] }
+  SRV-ORB-FIC01:
+    domaine: orbis.local
+    externe: true
+    os: { nom: Windows Server 2019 Standard, build: 17763.6532 }
+    reseau: { ip: 172.16.2.20/16 }
+    partages:
+      Echanges: { chemin: 'E:\Echanges', acces: { 'ORBIS\DL_Echanges_Vellane': modification } }
+
+# Postes. Valeurs par défaut (FORMAT.md) : DHCP, DNS du site, compte AD
+# activé dans l'OU indiquée, canal sécurisé sain (mdp_machine identique
+# des deux côtés), heure synchronisée sur un DC (NT5DS).
+postes:
+  PC-PAR-0020: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: tech.apprenant, reseau: { ip: 10.10.4.20/22, mac: 02-56-4C-10-00-20 } }
+  PC-PAR-0105: { site: Paris-Siege, ou: 'OU=Portables,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, type: portable, utilisateur_principal: tmoreau, reseau: { ip: 10.10.5.105/22, mac: 02-56-4C-10-01-05 } }
+  PC-PAR-0142: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: cmartin, groupes: [GG_Postes_Compta], reseau: { ip: 10.10.4.57/22, mac: 02-56-4C-10-01-42 } }
+  PC-PAR-0151: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: nrichard, groupes: [GG_Postes_Compta], reseau: { ip: 10.10.4.63/22, mac: 02-56-4C-10-01-51 } }
+  PC-PAR-0175: { site: Paris-Siege, ou: 'OU=Portables,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, type: portable, utilisateur_principal: jroux, reseau: { ip: 10.10.6.17/22, mac: 02-56-4C-10-01-75 } }
+  PC-PAR-0187: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: lbernard, reseau: { ip: 10.10.4.88/22, mac: 02-56-4C-10-01-87 } }
+  PC-PAR-0201: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: snguyen, reseau: { ip: 10.10.4.120/22, mac: 02-56-4C-10-02-01 } }
+  PC-PAR-0204: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: pgarnier, reseau: { ip: 10.10.4.122/22, mac: 02-56-4C-10-02-04 } }
+  PC-PAR-0206: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: cblanc, reseau: { ip: 10.10.4.125/22, mac: 02-56-4C-10-02-06 } }
+  PC-PAR-0233: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: dpetit, reseau: { ip: 10.10.5.33/22, mac: 02-56-4C-10-02-33 } }
+  PC-PAR-0234: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: agarcia, reseau: { ip: 10.10.5.34/22, mac: 02-56-4C-10-02-34 } }
+  PC-PAR-0261: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: mgirard, reseau: { ip: 10.10.5.61/22, mac: 02-56-4C-10-02-61 } }
+  PC-PAR-0262: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: afontaine, reseau: { ip: 10.10.5.62/22, mac: 02-56-4C-10-02-62 } }
+  PC-PAR-0270: { site: Paris-Siege, ou: 'OU=Standard,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, utilisateur_principal: rdubois, reseau: { ip: 10.10.5.70/22, mac: 02-56-4C-10-02-70 } }
+  PC-PAR-0301: { site: Paris-Siege, ou: 'OU=Portables,OU=Postes,OU=Paris', socle: W11-24H2-v2026.09, type: portable, utilisateur_principal: pdurand, reseau: { ip: 10.10.6.101/22, mac: 02-56-4C-10-03-01 } }
+  PC-PAR-0302: { site: Paris-Siege, ou: 'OU=Portables,OU=Postes,OU=Paris', socle: W11-24H2-v2026.09, type: portable, utilisateur_principal: ivincent, reseau: { ip: 10.10.6.102/22, mac: 02-56-4C-10-03-02 } }
+  PC-PAR-0303: { site: Paris-Siege, ou: 'OU=Portables,OU=Postes,OU=Paris', socle: W11-24H2-v2026.09, type: portable, utilisateur_principal: smasson, reseau: { ip: 10.10.6.103/22, mac: 02-56-4C-10-03-03 } }
+  PC-PAR-SR04: { site: Paris-Siege, ou: 'OU=SallesReunion,OU=Postes,OU=Paris', socle: W11-23H2-v2025.03, description: "Salle de réunion Rhône (4e étage)", reseau: { ip: 10.10.6.31/22, mac: 02-56-4C-10-05-04 } }
+  PC-LYO-0003: { site: Lyon, ou: 'OU=Postes,OU=Lyon', socle: W11-23H2-v2025.03, description: "Accueil - poste partagé", reseau: { ip: 10.20.10.13/24, mac: 02-56-4C-20-00-03 } }
+  PC-LYO-0009: { site: Lyon, ou: 'OU=Postes,OU=Lyon', socle: W11-23H2-v2025.03, utilisateur_principal: kleroy, reseau: { ip: 10.20.10.19/24, mac: 02-56-4C-20-00-09 } }
+  PC-LYO-0118: { site: Lyon, ou: 'OU=Postes,OU=Lyon', socle: W11-23H2-v2025.03, utilisateur_principal: ebonnet, reseau: { ip: 10.20.10.58/24, mac: 02-56-4C-20-01-18 } }
+  PC-LYO-0121: { site: Lyon, ou: 'OU=Postes,OU=Lyon', socle: W11-23H2-v2025.03, utilisateur_principal: ogautier, reseau: { ip: 10.20.10.61/24, mac: 02-56-4C-20-01-21 } }
+  PC-LYO-0133: { site: Lyon, ou: 'OU=Postes,OU=Lyon', socle: W11-23H2-v2025.03, utilisateur_principal: mrobin, reseau: { ip: 10.20.10.73/24, mac: 02-56-4C-20-01-33 } }
+  PC-LYO-0140: { site: Lyon, ou: 'OU=Postes,OU=Lyon', socle: W11-23H2-v2025.03, utilisateur_principal: lclement, reseau: { ip: 10.20.10.80/24, mac: 02-56-4C-20-01-40 } }
+  PC-LYO-0142: { site: Lyon, ou: 'OU=Postes,OU=Lyon', socle: W11-23H2-v2025.03, utilisateur_principal: lbernard2, reseau: { ip: 10.20.10.82/24, mac: 02-56-4C-20-01-42 } }
+  PC-LYO-0151: { site: Lyon, ou: 'OU=Postes,OU=Lyon', socle: W11-24H2-v2026.09, type: portable, utilisateur_principal: vbrun, reseau: { ip: 10.20.10.91/24, mac: 02-56-4C-20-01-51 } }
+  PC-LYO-0160: { site: Lyon, ou: 'OU=Postes,OU=Lyon', socle: W11-23H2-v2025.03, utilisateur_principal: fmorel, reseau: { ip: 10.20.10.100/24, mac: 02-56-4C-20-01-60 } }
+  PC-NTE-0042: { site: Nantes, ou: 'OU=Postes,OU=Nantes', socle: W11-23H2-v2025.03, utilisateur_principal: amercier, reseau: { ip: 10.30.10.42/24, mac: 02-56-4C-30-00-42 } }
+  PC-NTE-0050: { site: Nantes, ou: 'OU=Postes,OU=Nantes', socle: W11-23H2-v2025.03, utilisateur_principal: blefevre, reseau: { ip: 10.30.10.50/24, mac: 02-56-4C-30-00-50 } }
+  PC-NTE-0055: { site: Nantes, ou: 'OU=Postes,OU=Nantes', socle: W11-23H2-v2025.03, utilisateur_principal: ccolin, reseau: { ip: 10.30.10.55/24, mac: 02-56-4C-30-00-55 } }
+  PC-NTE-0061: { site: Nantes, ou: 'OU=Postes,OU=Nantes', socle: W11-24H2-v2026.09, type: portable, utilisateur_principal: glemaire, reseau: { ip: 10.30.10.61/24, mac: 02-56-4C-30-00-61 } }
+
+utilisateurs:
+  # Paris
+  cmartin:   { nom: Claire Martin, matricule: V01142, service: Comptabilité, fonction: Comptable, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0142, telephone: "4142", groupes: [GG_Tous_Paris, GG_Compta_Paris], mdp: { dernier_changement: -52j, version: 9 } }
+  nrichard:  { nom: Nadia Richard, matricule: V01151, service: Comptabilité, fonction: Comptable, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0151, telephone: "4151", groupes: [GG_Tous_Paris, GG_Compta_Paris], mdp: { dernier_changement: -17j, version: 6 } }
+  hlambert:  { nom: Hugo Lambert, matricule: V02298, service: Comptabilité, fonction: Comptable, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', telephone: "4298", groupes: [GG_Tous_Paris, GG_Compta_Paris], mdp: { dernier_changement: -30j, version: 2 } }
+  lbernard:  { nom: Léa Bernard, matricule: V01187, service: Achats, fonction: Acheteuse, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0187, telephone: "4187", manager: tmoreau, groupes: [GG_Tous_Paris, GG_Achats], mdp: { dernier_changement: -41j, version: 6 } }
+  tmoreau:   { nom: Thomas Moreau, matricule: V00105, service: Direction financière, fonction: Directeur administratif et financier adjoint, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0105, telephone: "4105", groupes: [GG_Tous_Paris, GG_DirFin, GG_PSO_Sensibles, GG_Managers], mdp: { dernier_changement: -44j, version: 15 } }
+  snguyen:   { nom: Sophie Nguyen, matricule: V01201, service: Contrôle de gestion, fonction: Contrôleuse de gestion, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0201, telephone: "4201", manager: pgarnier, groupes: [GG_Tous_Paris], mdp: { dernier_changement: -20j, version: 11 } }
+  pgarnier:  { nom: Pierre Garnier, matricule: V00204, service: Contrôle de gestion, fonction: Responsable du contrôle de gestion, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0204, telephone: "4204", groupes: [GG_Tous_Paris, GG_CTRLGEST_Projets_RW, GG_CTRLGEST_Archives_RW, GG_CTRLGEST_Budget_Direction, GG_Managers], mdp: { dernier_changement: -63j, version: 22 } }
+  cblanc:    { nom: Chloé Blanc, matricule: V01206, service: Contrôle de gestion, fonction: Contrôleuse de gestion, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0206, telephone: "4206", manager: pgarnier, groupes: [GG_Tous_Paris, GG_CTRLGEST_Projets_RW, GG_CTRLGEST_Archives_RW], mdp: { dernier_changement: -8j, version: 7 } }
+  dpetit:    { nom: David Petit, matricule: V01233, service: Marketing, fonction: Chargé de communication, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0233, telephone: "4233", groupes: [GG_Tous_Paris, GG_Marketing], mdp: { dernier_changement: -71j, version: 8 } }
+  agarcia:   { nom: Ana Garcia, matricule: V01234, service: Marketing, fonction: Graphiste, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0234, telephone: "4234", groupes: [GG_Tous_Paris, GG_Marketing], mdp: { dernier_changement: -12j, version: 5 } }
+  jroux:     { nom: Julie Roux, matricule: V01175, service: Ressources humaines, fonction: Chargée de recrutement, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0175, telephone: "4175", groupes: [GG_Tous_Paris, GG_RH_Tous], mdp: { dernier_changement: -33j, version: 10 } }
+  mgirard:   { nom: Marc Girard, matricule: V01261, service: Bureau d'études, fonction: Chef de projet, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0261, telephone: "4261", groupes: [GG_Tous_Paris, GG_Projets_Paris], mdp: { dernier_changement: -27j, version: 12 } }
+  afontaine: { nom: Alice Fontaine, matricule: V01262, service: Bureau d'études, fonction: Dessinatrice projeteuse, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0262, telephone: "4262", groupes: [GG_Tous_Paris, GG_Projets_Paris], mdp: { dernier_changement: -48j, version: 9 } }
+  rdubois:   { nom: Romain Dubois, matricule: V01270, service: Bureau d'études, fonction: Ingénieur méthodes, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0270, telephone: "4270", groupes: [GG_Tous_Paris, GG_Projets_Paris], mdp: { dernier_changement: -5j, version: 6 } }
+  pdurand:   { nom: Paul Durand, matricule: V01301, service: Direction des systèmes d'information, fonction: Chef de projet intégration Orbis, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0301, telephone: "4301", groupes: [GG_Tous_Paris, GG_Projet_Orbis], mdp: { dernier_changement: -1j, version: 14 } }
+  ivincent:  { nom: Inès Vincent, matricule: V01302, service: Direction financière, fonction: Consolidation, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0302, telephone: "4302", groupes: [GG_Tous_Paris, GG_Projet_Orbis], mdp: { dernier_changement: -36j, version: 8 } }
+  smasson:   { nom: Simon Masson, matricule: V01303, service: Achats, fonction: Acheteur groupe, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0303, telephone: "4303", groupes: [GG_Tous_Paris, GG_Projet_Orbis, GG_Achats], mdp: { dernier_changement: -59j, version: 10 } }
+  bmarchand: { nom: Bastien Marchand, matricule: V00030, service: Direction des systèmes d'information, fonction: Responsable infrastructure, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', telephone: "4030", groupes: [GG_Tous_Paris, GG_DSI], mdp: { dernier_changement: -15j, version: 31 } }
+  lduval:    { nom: Léo Duval, matricule: V00021, service: Direction des systèmes d'information, fonction: Technicien support (N1), site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', telephone: "4021", groupes: [GG_Tous_Paris, GG_DSI], mdp: { dernier_changement: -34j, version: 12 } }
+  tech.apprenant: { nom: Technicien Apprenant, matricule: V09999, service: Direction des systèmes d'information, fonction: Technicien support, site: Paris-Siege, ou: 'OU=Utilisateurs,OU=Paris', poste: PC-PAR-0020, groupes: [GG_Tous_Paris, GG_DSI], mdp: { dernier_changement: -10j, version: 3 } }
+  # Lyon
+  ebonnet:   { nom: Emma Bonnet, matricule: V02118, service: Comptabilité, fonction: Comptable, site: Lyon, ou: 'OU=Utilisateurs,OU=Lyon', poste: PC-LYO-0118, telephone: "5118", groupes: [GG_Tous_Lyon, GG_Compta_Lyon], mdp: { dernier_changement: -23j, version: 7 } }
+  lbernard2: { nom: Louis Bernard, matricule: V02142, service: Logistique, fonction: Responsable de quai, site: Lyon, ou: 'OU=Utilisateurs,OU=Lyon', poste: PC-LYO-0142, telephone: "5142", groupes: [GG_Tous_Lyon, GG_Logistique], mdp: { dernier_changement: -66j, version: 9 } }
+  kleroy:    { nom: Kevin Leroy, matricule: V02009, service: Direction des systèmes d'information, fonction: Technicien de proximité (Lyon), site: Lyon, ou: 'OU=Utilisateurs,OU=Lyon', poste: PC-LYO-0009, telephone: "5009", groupes: [GG_Tous_Lyon, GG_DSI], mdp: { dernier_changement: -2j, version: 18 } }
+  rperrin:   { nom: Régis Perrin, matricule: V02003, service: Accueil, fonction: Agent d'accueil, site: Lyon, ou: 'OU=Utilisateurs,OU=Lyon', poste: PC-LYO-0003, telephone: "5003", groupes: [GG_Tous_Lyon], mdp: { dernier_changement: -39j, version: 6 } }
+  ogautier:  { nom: Océane Gautier, matricule: V02121, service: Commercial, fonction: Assistante commerciale, site: Lyon, ou: 'OU=Utilisateurs,OU=Lyon', poste: PC-LYO-0121, telephone: "5121", groupes: [GG_Tous_Lyon, GG_Commerciaux], mdp: { dernier_changement: -11j, version: 9 } }
+  mrobin:    { nom: Mathieu Robin, matricule: V02133, service: Logistique, fonction: Planificateur, site: Lyon, ou: 'OU=Utilisateurs,OU=Lyon', poste: PC-LYO-0133, telephone: "5133", groupes: [GG_Tous_Lyon, GG_Logistique], mdp: { dernier_changement: -74j, version: 10 } }
+  lclement:  { nom: Lucie Clément, matricule: V02140, service: Commercial, fonction: Technico-commerciale, site: Lyon, ou: 'OU=Utilisateurs,OU=Lyon', poste: PC-LYO-0140, telephone: "5140", groupes: [GG_Tous_Lyon, GG_Commerciaux], mdp: { dernier_changement: -90j, version: 8 } }
+  vbrun:     { nom: Victor Brun, matricule: V02151, service: Commercial, fonction: Commercial terrain, site: Lyon, ou: 'OU=Utilisateurs,OU=Lyon', poste: PC-LYO-0151, telephone: "5151", groupes: [GG_Tous_Lyon, GG_Commerciaux], mdp: { dernier_changement: -29j, version: 7 } }
+  fmorel:    { nom: Florence Morel, matricule: V02160, service: Direction d'agence, fonction: Directrice de l'agence de Lyon, site: Lyon, ou: 'OU=Utilisateurs,OU=Lyon', poste: PC-LYO-0160, telephone: "5160", groupes: [GG_Tous_Lyon, GG_Managers], mdp: { dernier_changement: -45j, version: 13 } }
+  # Nantes
+  amercier:  { nom: Antoine Mercier, matricule: V03042, service: Services généraux, fonction: Assistant de site, site: Nantes, ou: 'OU=Utilisateurs,OU=Nantes', poste: PC-NTE-0042, telephone: "6042", groupes: [GG_Tous_Nantes], mdp: { dernier_changement: -19j, version: 8 } }
+  blefevre:  { nom: Bruno Lefèvre, matricule: V03050, service: Direction d'agence, fonction: Directeur de l'agence de Nantes, site: Nantes, ou: 'OU=Utilisateurs,OU=Nantes', poste: PC-NTE-0050, telephone: "6050", groupes: [GG_Tous_Nantes, GG_Managers], mdp: { dernier_changement: -58j, version: 12 } }
+  ccolin:    { nom: Camille Colin, matricule: V03055, service: Qualité, fonction: Technicienne qualité, site: Nantes, ou: 'OU=Utilisateurs,OU=Nantes', poste: PC-NTE-0055, telephone: "6055", groupes: [GG_Tous_Nantes], mdp: { dernier_changement: -26j, version: 5 } }
+  glemaire:  { nom: Gaëlle Lemaire, matricule: V03061, service: Commercial, fonction: Commerciale terrain, site: Nantes, ou: 'OU=Utilisateurs,OU=Nantes', poste: PC-NTE-0061, telephone: "6061", groupes: [GG_Tous_Nantes, GG_Commerciaux], mdp: { dernier_changement: -14j, version: 9 } }
+  # Comptes d'administration (OU=Administration)
+  adm-kleroy:    { nom: Kevin Leroy (admin), ou: OU=Administration, groupes: [GG_Admins_Postes], mdp: { dernier_changement: -2j, version: 18 } }
+  adm-bmarchand: { nom: Bastien Marchand (admin), ou: OU=Administration, groupes: [Admins du domaine], mdp: { dernier_changement: -15j, version: 31 } }
+  adm-lduval:    { nom: Léo Duval (admin), ou: OU=Administration, groupes: [GG_Admins_Postes], mdp: { dernier_changement: -34j, version: 12 } }
+  adm-apprenant: { nom: Technicien Apprenant (admin), ou: OU=Administration, groupes: [GG_Admins_Postes], mdp: { dernier_changement: -10j, version: 3 } }
+  svc-nettoyage: { nom: Compte de service du script de nettoyage AD, ou: OU=Administration, description: "Exécute NettoyageAD.ps1 le 1er de chaque mois (SRV-DEPLOI-01)", groupes: [GG_Delegation_Postes], mdp: { dernier_changement: -200j, version: 2, expire_jamais: true } }
+
+groupes:
+  GG_Tous_Paris: { ou: OU=Groupes, etendue: globale, description: Tous les salariés du siège }
+  GG_Tous_Lyon: { ou: OU=Groupes, etendue: globale, description: Tous les salariés de l'agence de Lyon }
+  GG_Tous_Nantes: { ou: OU=Groupes, etendue: globale, description: Tous les salariés de l'agence de Nantes }
+  GG_Compta_Paris: { ou: OU=Groupes, etendue: globale }
+  GG_Compta_Lyon: { ou: OU=Groupes, etendue: globale }
+  GG_Achats: { ou: OU=Groupes, etendue: globale }
+  GG_Marketing: { ou: OU=Groupes, etendue: globale }
+  GG_Logistique: { ou: OU=Groupes, etendue: globale }
+  GG_Commerciaux: { ou: OU=Groupes, etendue: globale }
+  GG_DirFin: { ou: OU=Groupes, etendue: globale, description: Direction financière }
+  GG_Managers: { ou: OU=Groupes, etendue: globale }
+  GG_DSI: { ou: OU=Groupes, etendue: globale }
+  GG_PSO_Sensibles: { ou: OU=Groupes, etendue: globale, description: "Comptes soumis à PSO_Comptes_Sensibles (14 caractères, 60 jours)" }
+  GG_CTRLGEST_Projets_RW: { ou: OU=Groupes, etendue: globale, description: "Partage Projets_CG (lecteur P:) - modification" }
+  GG_CTRLGEST_Projets_R: { ou: OU=Groupes, etendue: globale, description: "Partage Projets_CG (lecteur P:) - lecture" }
+  GG_CTRLGEST_Archives_RW: { ou: OU=Groupes, etendue: globale, description: "Partage Archives_CG (lecteur W:) - modification" }
+  GG_CTRLGEST_Budget_Direction: { ou: OU=Groupes, etendue: globale, description: "Budget de la direction (lecteur B:) - réservé au responsable" }
+  GG_RH_Tous: { ou: OU=Groupes, etendue: globale, description: "Partage RH (lecteur R:)" }
+  GG_RH_Dossiers_Personnel: { ou: OU=Groupes, etendue: globale, description: "Dossiers individuels des salariés - données sensibles" }
+  GG_Projets_Paris: { ou: OU=Groupes, etendue: globale, description: "Partage \\\\SRV-FIC-02\\Projets (lecteur Q:)" }
+  GG_Qualite_Nantes: { ou: OU=Groupes, etendue: globale, description: "Partage Qualité (lecteur K:)" }
+  GG_Projet_Orbis: { ou: OU=Groupes, etendue: globale, description: "Accès aux ressources d'Orbis (via ORBIS\\DL_Echanges_Vellane)" }
+  GG_Postes_Compta:
+    ou: OU=Groupes
+    etendue: globale
+    description: Postes de la comptabilité (ciblage de GPO_C_Compta_ModeIE)
+    membres: [PC-PAR-0142, PC-PAR-0151]
+  GG_Admins_Postes: { ou: OU=Administration, etendue: globale, description: Administrateurs locaux des postes }
+  GG_Delegation_Postes: { ou: OU=Administration, etendue: globale, description: Droits délégués sur OU=Postes et OU=Desactives }
+  Admins du domaine: { conteneur: CN=Users, etendue: globale, integre: true }
+
+# Les membres des groupes d'utilisateurs sont déduits du champ `groupes` des
+# comptes ; `membres` ne sert qu'aux groupes d'ordinateurs.
+
+filtres_wmi:
+  Windows 10 uniquement:
+    requete: SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.0.1%"
+
+gpo:
+  Default Domain Policy:
+    guid: "{31B2F340-016D-11D2-945F-00C04FB984F9}"
+    liens: [{ cible: "" }]
+    filtrage: { appliquer: [Utilisateurs authentifiés] }
+    parametres: ["Stratégies de comptes (mot de passe, verrouillage, Kerberos) : voir domaines.vellane.local"]
+  Default Domain Controllers Policy:
+    guid: "{6AC1786C-016F-11D2-945F-00C04FB984F9}"
+    liens: [{ cible: OU=Domain Controllers }]
+    filtrage: { appliquer: [Utilisateurs authentifiés] }
+  GPO_U_Lecteurs_Reseau:
+    guid: "{8D2E5F14-3C71-4B0A-9E62-71A4C0B95D13}"
+    liens: [{ cible: 'OU=Utilisateurs,OU=Paris' }, { cible: 'OU=Utilisateurs,OU=Lyon' }, { cible: 'OU=Utilisateurs,OU=Nantes' }]
+    filtrage: { appliquer: [Utilisateurs authentifiés] }
+    lecteurs:
+      H: { chemin: '\\SRV-FIC-01\Perso$\%USERNAME%' }
+      S: { chemin: '\\SRV-FIC-01\Services' }
+      P: { chemin: '\\SRV-FIC-01\Projets_CG', ciblage_groupes: [GG_CTRLGEST_Projets_RW, GG_CTRLGEST_Projets_R] }
+      W: { chemin: '\\SRV-FIC-01\Archives_CG', ciblage_groupes: [GG_CTRLGEST_Archives_RW] }
+      B: { chemin: '\\SRV-FIC-01\Budget_Direction', ciblage_groupes: [GG_CTRLGEST_Budget_Direction] }
+      R: { chemin: '\\SRV-FIC-01\RH', ciblage_groupes: [GG_RH_Tous] }
+      Q: { chemin: '\\SRV-FIC-02\Projets', ciblage_groupes: [GG_Projets_Paris] }
+      K: { chemin: '\\SRV-FIC-01\Qualite', ciblage_groupes: [GG_Qualite_Nantes] }
+  GPO_C_Postes_Securite:
+    guid: "{0B7A92C3-55E1-4D8F-A1B6-2E9C47D083F5}"
+    liens: [{ cible: 'OU=Postes,OU=Paris' }, { cible: 'OU=Postes,OU=Lyon' }, { cible: 'OU=Postes,OU=Nantes' }]
+    filtrage: { appliquer: [Utilisateurs authentifiés] }
+    parametres: ["Verrouillage de l'écran après 10 min", "BitLocker : sauvegarde de la clé de récupération dans AD", "Windows LAPS : sauvegarde dans AD, rotation 30 jours"]
+  GPO_C_Paris_Imprimantes:
+    guid: "{4E1F0C88-91A2-4F3B-B7D5-6A0E2C9F1B47}"
+    liens: [{ cible: 'OU=Postes,OU=Paris' }]
+    filtrage: { appliquer: [Utilisateurs authentifiés] }
+    imprimantes: ['\\SRV-IMP-01\PAR-2E-COPIEUR', '\\SRV-IMP-01\PAR-3E-COPIEUR']
+  GPO_C_Lyon_Imprimantes:
+    guid: "{C5A3D917-0E6B-4C21-8F4A-B39D7E15A260}"
+    liens: [{ cible: 'OU=Postes,OU=Lyon' }]
+    filtrage: { appliquer: [Utilisateurs authentifiés] }
+    imprimantes: ['\\SRV-IMP-01\LYO-RDC-COPIEUR', '\\SRV-IMP-01\LYO-1E-COPIEUR']
+  GPO_C_Nantes_Imprimantes:
+    guid: "{7F29B6E0-4D8C-4A15-9C3E-01B5A8D7E6F2}"
+    liens: [{ cible: 'OU=Postes,OU=Nantes' }]
+    filtrage: { appliquer: [Utilisateurs authentifiés] }
+    imprimantes: ['\\SRV-IMP-01\NTE-COPIEUR']
+  GPO_C_Compta_ModeIE:
+    guid: "{E2B84A61-7C3F-4E90-A5D2-9F1C6B08D374}"
+    description: Mode Internet Explorer d'Edge pour Compteo Web (compta.vellane.local)
+    liens: [{ cible: 'OU=Postes,OU=Paris' }]
+    filtrage: { appliquer: [GG_Postes_Compta], lire: [Utilisateurs authentifiés] }
+    parametres: ["Edge > Configurer la liste des sites en mode Entreprise : \\\\vellane.local\\NETLOGON\\Edge\\sites_compta.xml", "Edge > Intégration d'Internet Explorer : mode Internet Explorer"]
+  GPO_C_Win10_Heritage:
+    guid: "{19D0C7A4-2B85-4E6F-8A13-C47E02F9B5D8}"
+    description: Anciens réglages des postes Windows 10 (à supprimer après la migration)
+    liens: [{ cible: 'OU=Postes,OU=Paris' }]
+    filtrage: { appliquer: [Utilisateurs authentifiés] }
+    filtre_wmi: Windows 10 uniquement
+
+# --- Réseau -----------------------------------------------------------------
+
+dns:
+  serveurs: [DC-PAR-01, DC-PAR-02, DC-LYO-01, DC-NTE-01]
+  redirecteurs: [192.0.2.53, 198.51.100.53]
+  redirecteurs_conditionnels:
+    orbis.local: { serveurs: [172.16.0.10, 172.16.0.13], etendue_replication: foret }
+  zones:
+    vellane.local:
+      type: integree_ad
+      etendue_replication: domaine
+      mises_a_jour: securisees
+      vieillissement: { actif: true, non_actualisation: 7j, actualisation: 7j }
+      nettoyage: { serveur: DC-PAR-01, periode: 7j, dernier: -3j }
+      # Enregistrements A des contrôleurs, serveurs et postes : générés par le
+      # moteur à partir de leur adresse (inscription dynamique, horodatée).
+      enregistrements_generes: [controleurs, serveurs, postes]
+      enregistrements:
+        intranet: [{ type: CNAME, donnees: SRV-WEB-01.vellane.local, statique: true }]
+        notesdefrais: [{ type: CNAME, donnees: SRV-WEB-01.vellane.local, statique: true }]
+        api: [{ type: CNAME, donnees: SRV-WEB-01.vellane.local, statique: true }]
+        compta: [{ type: CNAME, donnees: SRV-APP-01.vellane.local, statique: true }]
+        pki: [{ type: CNAME, donnees: SRV-PKI-01.vellane.local, statique: true }]
+        deploiement: [{ type: CNAME, donnees: SRV-DEPLOI-01.vellane.local, statique: true }]
+    _msdcs.vellane.local:
+      type: integree_ad
+      etendue_replication: foret
+      mises_a_jour: securisees
+      # CNAME <guid_dsa>, SRV _ldap, _kerberos, _gc, pdc : générés à partir des DC.
+      enregistrements_generes: [controleurs]
+    10.10.in-addr.arpa: { type: integree_ad, etendue_replication: domaine, mises_a_jour: securisees, enregistrements_generes: [controleurs, serveurs, postes] }
+    20.10.in-addr.arpa: { type: integree_ad, etendue_replication: domaine, mises_a_jour: securisees, enregistrements_generes: [controleurs, serveurs, postes] }
+    30.10.in-addr.arpa: { type: integree_ad, etendue_replication: domaine, mises_a_jour: securisees, enregistrements_generes: [controleurs, serveurs, postes] }
+
+dhcp:
+  SRV-DHCP-01:
+    autorise: true
+    etendues:
+      10.10.4.0:
+        nom: PAR-Postes
+        masque: 255.255.252.0
+        plage: [10.10.4.20, 10.10.7.230]
+        exclusions: []
+        duree_bail: 8j
+        options: { 3: [10.10.4.1], 6: [10.10.1.10, 10.10.1.11], 15: vellane.local }
+        occupation: 61%
+      10.20.10.0:
+        nom: LYO-Postes
+        masque: 255.255.255.0
+        plage: [10.20.10.10, 10.20.10.250]
+        exclusions: [[10.20.10.200, 10.20.10.250]]
+        duree_bail: 8j
+        options: { 3: [10.20.10.1], 6: [10.20.1.10], 15: vellane.local }
+        occupation: 78%
+      10.30.10.0:
+        nom: NTE-Postes
+        masque: 255.255.255.0
+        plage: [10.30.10.10, 10.30.10.250]
+        exclusions: [[10.30.10.200, 10.30.10.250]]
+        duree_bail: 8j
+        options: { 3: [10.30.10.1], 6: [10.30.1.10, 10.10.1.10], 15: vellane.local }
+        occupation: 52%
+# `occupation` : le moteur génère les baux de remplissage (noms PC-<site>-xxxx)
+# en plus de ceux des postes déclarés, jusqu'à ce pourcentage du pool.
+
+# --- Services d'infrastructure ---------------------------------------------
+
+pki:
+  autorites:
+    Vellane Racine:
+      type: racine_hors_ligne
+      validite: { debut: 2021-03-01, fin: 2041-03-01 }
+      crl: { publiee: -40j, prochaine: +325j }
+    Vellane CA Emission 01:
+      type: entreprise_subordonnee
+      serveur: SRV-PKI-01
+      parent: Vellane Racine
+      validite: { debut: 2021-03-15, fin: 2031-03-15 }
+      crl:
+        base: { publiee: -3j, prochaine: +4j, url: 'http://pki.vellane.local/crl/Vellane CA Emission 01.crl' }
+        delta: { publiee: -6h, prochaine: +18h, url: 'http://pki.vellane.local/crl/Vellane CA Emission 01+.crl' }
+      modeles:
+        Serveur Web Vellane: { validite: 2ans, inscription_automatique: true, renouvellement: 6sem }
+        Ordinateur Vellane: { validite: 1an, inscription_automatique: true, renouvellement: 6sem }
+
+socles:
+  W11-23H2-v2025.03:
+    os: { nom: Windows 11 Entreprise, version: 23H2, build: 22631.6199 }
+    logiciels:
+      - Microsoft Visual C++ 2005 Redistributable (x86) 8.0.61001
+      - Microsoft Visual C++ 2008 Redistributable - x86 9.0.30729.6161
+      - Microsoft Visual C++ 2008 Redistributable - x64 9.0.30729.6161
+      - Microsoft Visual C++ 2015-2022 Redistributable (x86) 14.44.35211
+      - Microsoft Visual C++ 2015-2022 Redistributable (x64) 14.44.35211
+      - Microsoft .NET Framework 4.8.1
+      - Microsoft 365 Apps for enterprise
+      - Microsoft Edge
+      - Antivirus Bouclier 12
+      - Agent de déploiement 5.0
+  W11-24H2-v2026.09:
+    os: { nom: Windows 11 Entreprise, version: 24H2, build: 26100.7171 }
+    notes_de_version: NV-SOCLE-2026.09
+    logiciels:
+      - Microsoft Visual C++ 2015-2022 Redistributable (x86) 14.44.35211
+      - Microsoft Visual C++ 2015-2022 Redistributable (x64) 14.44.35211
+      - Microsoft .NET Framework 4.8.1
+      - Microsoft 365 Apps for enterprise
+      - Microsoft Edge
+      - Antivirus Bouclier 12
+      - Agent de déploiement 5.0
+
+deploiement:
+  serveur: SRV-DEPLOI-01
+  applications:
+    APP-VENTES-73:
+      nom: Vellane Ventes 7.3
+      editeur: Vellane DSI
+      type: msi
+      detection: "Code produit {5C1D7A20-3E44-4B8F-9D6A-0A73C1E2F730}"
+  deploiements: {}
+
+virtualisation:
+  hotes:
+    HV-PAR-01: { site: Paris-Siege, cluster: CL-PAR, vms: [DC-PAR-01, SRV-FIC-01, SRV-IMP-01, SRV-APP-01, SRV-DHCP-01] }
+    HV-PAR-02: { site: Paris-Siege, cluster: CL-PAR, vms: [DC-PAR-02, SRV-FIC-02, SRV-WEB-01, SRV-PKI-01, SRV-DEPLOI-01] }
+    HV-LYO-01: { site: Lyon, cluster: null, vms: [DC-LYO-01] }
+    HV-NTE-01: { site: Nantes, cluster: null, vms: [DC-NTE-01] }
+
+# --- Documentation -----------------------------------------------------------
+
+documents:
+  KB-0101:
+    titre: Compte verrouillé
+    niveau: N1
+    contenu: >
+      Vérifier l'identité de l'appelant (rappel au numéro de l'annuaire ou
+      matricule). Vérifier que le compte est bien verrouillé et non désactivé
+      ou expiré. Déverrouiller. Si le compte se reverrouille dans la journée,
+      ne pas déverrouiller une deuxième fois : transmettre au support systèmes
+      (N2) pour recherche de la source dans les journaux des DC.
+  KB-0102:
+    titre: Règles de mot de passe
+    niveau: N1
+    contenu: >
+      Stratégie du domaine : 12 caractères minimum, 3 catégories de
+      caractères, 24 derniers mots de passe interdits, changement tous les
+      90 jours. Certains comptes sont soumis à une stratégie renforcée (PSO) :
+      vérifier la stratégie résultante du compte. Ne jamais cocher « Le mot de
+      passe n'expire jamais » sur un compte nominatif. Un mot de passe
+      provisoire se communique par SMS au numéro de l'annuaire, jamais par
+      courriel, et impose un changement à la connexion.
+  KB-0115:
+    titre: Accès aux partages et lecteurs réseau
+    niveau: N1
+    contenu: >
+      Les lecteurs réseau sont créés à l'ouverture de session par
+      GPO_U_Lecteurs_Reseau, selon les groupes du compte. Tout ajout à un
+      groupe d'accès doit être validé par le responsable de l'utilisateur
+      (dans le ticket). Après l'ajout, l'utilisateur doit fermer puis rouvrir
+      sa session : un gpupdate ne met pas à jour ses groupes. Ne jamais
+      recopier les groupes d'un collègue.
+  KB-0120:
+    titre: Spouleur d'impression arrêté sur un poste
+    niveau: N1
+    contenu: >
+      Si le spouleur s'arrête à nouveau juste après un redémarrage, un travail
+      d'impression corrompu est probablement en cause : arrêter le service,
+      supprimer le contenu de C:\Windows\System32\spool\PRINTERS (et
+      seulement ce dossier), redémarrer le service. Ne pas toucher aux files
+      d'attente du serveur d'impression, partagées par tout un étage.
+  KB-0210:
+    titre: Postes de travail - OU et groupes
+    niveau: N2
+    contenu: >
+      Un poste réaffecté d'un site à l'autre doit être déplacé dans l'OU
+      Postes du nouveau site (Standard ou Portables). Les postes de la
+      comptabilité de Paris sont membres de GG_Postes_Compta, qui cible
+      GPO_C_Compta_ModeIE. L'appartenance d'un ordinateur à un groupe n'est
+      prise en compte qu'après un redémarrage.
+  KB-0230:
+    titre: Verrouillages répétés d'un compte
+    niveau: N2
+    contenu: >
+      Lire l'événement 4740 sur l'émulateur PDC (DC-PAR-01) : le champ « Nom
+      de l'ordinateur appelant » donne la machine d'origine. Les 4771 (code
+      0x18) sur les autres DC donnent l'adresse IP du client. Causes
+      fréquentes : session ouverte ailleurs, lecteur réseau avec identifiants
+      enregistrés, tâche planifiée, téléphone. Traiter la source avant de
+      déverrouiller.
+  KB-0305:
+    titre: Incident majeur
+    niveau: N2
+    contenu: >
+      Plus de 10 utilisateurs ou un service entier touchés : déclarer un
+      incident majeur, rattacher les tickets à un ticket parent, informer la
+      population concernée (bandeau, message), prévenir le responsable
+      d'astreinte. Aucune modification d'infrastructure sans diagnostic
+      partagé.
+
+changements: {}

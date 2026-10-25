@@ -1,0 +1,1117 @@
+# Vocabulaire des actions de l'apprenant.
+#
+# Le moteur traduit chaque commande tapée ou chaque clic dans une console en
+# une action de ce catalogue, avec une cible et des paramètres. Les scénarios
+# ne parlent qu'en actions : un même geste fait par une cmdlet ou par une
+# console graphique est noté de la même façon.
+#
+# Champs :
+#   niveau      niveau minimal du parcours pour utiliser l'action. Pour les
+#               actions sur une machine, il dépend du type de machine :
+#               { poste: N1, serveur: N2, dc: N3 }.
+#   type        lecture | modification | communication
+#   cible       type d'objet visé (voir `cibles`)
+#   parametres  paramètres reconnus, utilisables dans les motifs des scénarios
+#   commandes   syntaxes reconnues par l'interpréteur du moteur
+#   interfaces  équivalents dans les consoles graphiques simulées
+
+schema: actions/1
+
+cibles:
+  annuaire: Recherche dans l'annuaire (pas de cible unique)
+  utilisateur: Compte utilisateur (clé = sAMAccountName)
+  groupe: Groupe AD (clé = nom)
+  ordinateur: Compte ordinateur AD (clé = nom de la machine)
+  machine: Poste, serveur ou contrôleur de domaine (clé = nom)
+  domaine: Domaine AD (clé = nom DNS)
+  gpo: Objet de stratégie de groupe (clé = nom)
+  zone_dns: Zone DNS (clé = nom de zone)
+  serveur_dhcp: Serveur DHCP (clé = nom)
+  approbation: Relation d'approbation (clé = domaine distant)
+  deploiement: Déploiement logiciel (clé = identifiant)
+  application: Application du catalogue de déploiement (clé = identifiant)
+  file_impression: File d'attente partagée (clé = SERVEUR\file)
+  site_web: Site IIS (clé = SERVEUR/site)
+  vm: Machine virtuelle (clé = nom)
+  ticket: Ticket (clé = numéro)
+  equipe: Équipe (clé = identifiant)
+  document: Document de la base de connaissances ou changement (clé = identifiant)
+  aucune: Action sans cible
+
+actions:
+
+  # --- Annuaire : utilisateurs ----------------------------------------------
+  ad.utilisateur.rechercher:
+    niveau: N1
+    type: lecture
+    cible: annuaire
+    description: Chercher des comptes par nom, prénom, identifiant ou service.
+    parametres: { filtre: texte }
+    commandes: ["Get-ADUser -Filter", "Search-ADAccount", "dsquery user"]
+    interfaces: ["Utilisateurs et ordinateurs AD > Rechercher"]
+  ad.utilisateur.lire:
+    niveau: N1
+    type: lecture
+    cible: utilisateur
+    description: >
+      Propriétés d'un compte : activé, verrouillé, expiration et dernier
+      changement du mot de passe, groupes, OU, description. Les attributs non
+      répliqués (badPwdCount, lastLogon) sont ceux du DC interrogé.
+    parametres: { dc: machine }
+    commandes: ["Get-ADUser -Identity", "net user /domain"]
+    interfaces: ["Utilisateurs et ordinateurs AD > Propriétés", "ADInfo > Fiche compte"]
+  ad.utilisateur.groupes.lire:
+    niveau: N1
+    type: lecture
+    cible: utilisateur
+    description: Groupes dont le compte est membre (directs et imbriqués).
+    commandes: ["Get-ADPrincipalGroupMembership", "Get-ADUser -Properties MemberOf", "net user /domain"]
+    interfaces: ["Propriétés > Membre de"]
+  ad.utilisateur.strategie_mdp.lire:
+    niveau: N1
+    type: lecture
+    cible: utilisateur
+    description: Stratégie de mot de passe résultante (stratégie du domaine ou PSO).
+    commandes: ["Get-ADUserResultantPasswordPolicy", "Get-ADUser -Properties msDS-ResultantPSO"]
+    interfaces: ["Éditeur d'attributs > msDS-ResultantPSO"]
+  ad.utilisateur.deverrouiller:
+    niveau: N1
+    type: modification
+    cible: utilisateur
+    description: Déverrouiller le compte (remet lockoutTime à 0, écrit sur le DC visé puis réplication urgente vers le PDC).
+    commandes: ["Unlock-ADAccount"]
+    interfaces: ["Propriétés > Compte > Déverrouiller le compte"]
+  ad.utilisateur.reinitialiser_mdp:
+    niveau: N1
+    type: modification
+    cible: utilisateur
+    description: Réinitialiser le mot de passe.
+    parametres: { changer_a_la_connexion: booleen, conforme: booleen }
+    commandes: ["Set-ADAccountPassword -Reset", "net user * /domain"]
+    interfaces: ["Clic droit > Réinitialiser le mot de passe"]
+  ad.utilisateur.modifier:
+    niveau: N1
+    type: modification
+    cible: utilisateur
+    description: Modifier une propriété du compte (PasswordNeverExpires, ChangePasswordAtLogon, Description...).
+    parametres: { propriete: texte, valeur: valeur }
+    commandes: ["Set-ADUser", "Set-ADAccountControl"]
+    interfaces: ["Propriétés > Compte > Options de compte"]
+  ad.utilisateur.activer:
+    niveau: N1
+    type: modification
+    cible: utilisateur
+    commandes: ["Enable-ADAccount"]
+    interfaces: ["Clic droit > Activer le compte"]
+  ad.utilisateur.desactiver:
+    niveau: N1
+    type: modification
+    cible: utilisateur
+    commandes: ["Disable-ADAccount"]
+    interfaces: ["Clic droit > Désactiver le compte"]
+  ad.utilisateur.copier_groupes:
+    niveau: N1
+    type: modification
+    cible: utilisateur
+    description: >
+      Ajouter au compte cible tous les groupes d'un autre compte (« faire
+      comme Untel »). Détecté aussi quand plus de trois groupes d'un même
+      compte modèle sont ajoutés en moins de cinq minutes.
+    parametres: { modele: utilisateur }
+    commandes: ["Get-ADPrincipalGroupMembership <modele> | Add-ADPrincipalGroupMembership"]
+    interfaces: ["ADInfo > Copier les groupes de..."]
+  ad.utilisateur.supprimer:
+    niveau: N2
+    type: modification
+    cible: utilisateur
+    description: >
+      Supprimer un compte utilisateur. Le paramètre `dc` désigne le contrôleur
+      sur lequel la suppression est faite (utile quand les DC divergent).
+    parametres: { dc: machine }
+    commandes: ["Remove-ADUser", "Remove-ADUser -Server"]
+    interfaces: ["Clic droit > Supprimer"]
+  ad.utilisateurs.reinitialiser_en_masse:
+    niveau: N1
+    type: modification
+    cible: annuaire
+    description: Réinitialiser ou déverrouiller plusieurs comptes d'un coup (script, sélection multiple).
+    parametres: { filtre: texte, nombre: entier, operation: "reinitialiser_mdp | deverrouiller | forcer_changement" }
+    commandes: ["Get-ADUser -Filter ... | Set-ADAccountPassword", "Get-ADUser -SearchBase ... | Set-ADUser -ChangePasswordAtLogon"]
+    interfaces: ["Sélection multiple > Réinitialiser"]
+
+  # --- Annuaire : groupes ----------------------------------------------------
+  ad.groupe.lire:
+    niveau: N1
+    type: lecture
+    cible: groupe
+    description: Description, étendue, membres d'un groupe.
+    parametres: { dc: machine }
+    commandes: ["Get-ADGroup", "Get-ADGroupMember", "net group /domain"]
+    interfaces: ["Propriétés du groupe > Membres"]
+  ad.groupe.rechercher:
+    niveau: N1
+    type: lecture
+    cible: annuaire
+    parametres: { filtre: texte }
+    commandes: ["Get-ADGroup -Filter"]
+    interfaces: ["Utilisateurs et ordinateurs AD > Rechercher"]
+  ad.groupe.ajouter_membre:
+    niveau: N1
+    type: modification
+    cible: groupe
+    parametres: { membre: "utilisateur | ordinateur" }
+    commandes: ["Add-ADGroupMember", "Add-ADPrincipalGroupMembership", "net group /add /domain"]
+    interfaces: ["Propriétés du groupe > Membres > Ajouter"]
+  ad.groupe.retirer_membre:
+    niveau: N1
+    type: modification
+    cible: groupe
+    parametres: { membre: "utilisateur | ordinateur" }
+    commandes: ["Remove-ADGroupMember", "Remove-ADPrincipalGroupMembership"]
+    interfaces: ["Propriétés du groupe > Membres > Supprimer"]
+
+  # --- Annuaire : ordinateurs, OU, DC ------------------------------------
+  ad.ordinateur.lire:
+    niveau: N1
+    type: lecture
+    cible: ordinateur
+    description: Compte ordinateur (activé, OU, description, système, dernier changement de mot de passe machine, groupes).
+    parametres: { dc: machine }
+    commandes: ["Get-ADComputer"]
+    interfaces: ["Utilisateurs et ordinateurs AD > Propriétés de l'ordinateur"]
+  ad.ou.lire:
+    niveau: N1
+    type: lecture
+    cible: annuaire
+    description: Parcourir l'arborescence des OU et leur contenu.
+    parametres: { ou: texte }
+    commandes: ["Get-ADOrganizationalUnit", "Get-ADObject -SearchBase"]
+    interfaces: ["Utilisateurs et ordinateurs AD > arborescence"]
+  ad.ordinateur.deplacer:
+    niveau: N2
+    type: modification
+    cible: ordinateur
+    parametres: { ou: texte }
+    commandes: ["Move-ADObject"]
+    interfaces: ["Clic droit > Déplacer", "glisser-déposer"]
+  ad.ordinateur.activer:
+    niveau: N2
+    type: modification
+    cible: ordinateur
+    commandes: ["Enable-ADAccount"]
+    interfaces: ["Clic droit > Activer le compte"]
+  ad.ordinateur.desactiver:
+    niveau: N2
+    type: modification
+    cible: ordinateur
+    commandes: ["Disable-ADAccount"]
+    interfaces: ["Clic droit > Désactiver le compte"]
+  ad.ordinateur.modifier:
+    niveau: N2
+    type: modification
+    cible: ordinateur
+    parametres: { propriete: texte, valeur: valeur }
+    commandes: ["Set-ADComputer"]
+    interfaces: ["Propriétés de l'ordinateur"]
+  ad.ordinateur.reinitialiser:
+    niveau: N2
+    type: modification
+    cible: ordinateur
+    description: Réinitialiser le compte ordinateur dans l'annuaire (le poste perd sa relation d'approbation).
+    commandes: ["dsmod computer -reset"]
+    interfaces: ["Clic droit > Réinitialiser le compte"]
+  ad.ordinateur.supprimer:
+    niveau: N2
+    type: modification
+    cible: ordinateur
+    description: >
+      Supprimer le compte ordinateur. Supprime aussi ses objets enfants :
+      clés de récupération BitLocker, mot de passe LAPS, appartenance aux
+      groupes.
+    commandes: ["Remove-ADComputer", "Remove-ADObject"]
+    interfaces: ["Clic droit > Supprimer"]
+  ad.laps.lire:
+    niveau: N2
+    type: lecture
+    cible: ordinateur
+    description: Mot de passe du compte administrateur local géré par LAPS.
+    commandes: ["Get-LapsADPassword"]
+    interfaces: ["Propriétés de l'ordinateur > LAPS"]
+  ad.bitlocker.lire:
+    niveau: N2
+    type: lecture
+    cible: ordinateur
+    commandes: ["Get-ADObject -Filter {objectClass -eq 'msFVE-RecoveryInformation'}"]
+    interfaces: ["Propriétés de l'ordinateur > Récupération BitLocker"]
+  ad.domaine.strategie_mdp.lire:
+    niveau: N1
+    type: lecture
+    cible: domaine
+    commandes: ["Get-ADDefaultDomainPasswordPolicy", "Get-ADFineGrainedPasswordPolicy", "net accounts /domain"]
+    interfaces: ["Default Domain Policy > Stratégies de comptes"]
+  ad.domaine.strategie_mdp.modifier:
+    niveau: N2
+    type: modification
+    cible: domaine
+    description: Modifier la stratégie de mot de passe, de verrouillage ou Kerberos du domaine.
+    parametres: { propriete: texte, valeur: valeur }
+    commandes: ["Set-ADDefaultDomainPasswordPolicy", "net accounts /domain"]
+    interfaces: ["Default Domain Policy > Stratégies de comptes"]
+  ad.dc.lister:
+    niveau: N1
+    type: lecture
+    cible: domaine
+    commandes: ["Get-ADDomainController -Filter *", "nltest /dclist:"]
+    interfaces: ["Sites et services AD"]
+  ad.dc.localiser:
+    niveau: N2
+    type: lecture
+    cible: machine
+    description: DC choisi par une machine (localisateur de DC).
+    commandes: ["nltest /dsgetdc:", "Get-ADDomainController -Discover", "echo %LOGONSERVER%"]
+  ad.dc.diagnostiquer:
+    niveau: N2
+    type: lecture
+    cible: machine
+    parametres: { test: texte }
+    commandes: ["dcdiag", "dcdiag /test:dns", "dcdiag /test:replications"]
+  ad.fsmo.lire:
+    niveau: N2
+    type: lecture
+    cible: domaine
+    commandes: ["netdom query fsmo", "Get-ADDomain", "Get-ADForest"]
+  ad.fsmo.saisir:
+    niveau: N3
+    type: modification
+    cible: machine
+    parametres: { role: texte }
+    commandes: ["Move-ADDirectoryServerOperationMasterRole -Force", "ntdsutil roles seize"]
+  ad.dc.retirer:
+    niveau: N3
+    type: modification
+    cible: machine
+    description: Rétrogradation forcée ou nettoyage des métadonnées d'un DC.
+    commandes: ["Uninstall-ADDSDomainController -ForceRemoval", "ntdsutil metadata cleanup"]
+    interfaces: ["Sites et services AD > Supprimer l'objet NTDS Settings"]
+  ad.dc.promouvoir:
+    niveau: N3
+    type: modification
+    cible: machine
+    commandes: ["Install-ADDSDomainController"]
+
+  # --- Réplication -----------------------------------------------------------
+  ad.replication.lire:
+    niveau: N2
+    type: lecture
+    cible: machine
+    description: État de la réplication entrante d'un DC ou de toute la forêt.
+    parametres: { vue: "resume | partenaires | echecs | metadonnees" }
+    commandes: ["repadmin /replsummary", "repadmin /showrepl", "Get-ADReplicationFailure", "Get-ADReplicationPartnerMetadata", "repadmin /showobjmeta"]
+    interfaces: ["Sites et services AD > NTDS Settings"]
+  ad.replication.forcer:
+    niveau: N3
+    type: modification
+    cible: machine
+    parametres: { source: machine, partition: texte, toutes: booleen }
+    commandes: ["repadmin /syncall", "repadmin /replicate", "Sync-ADObject"]
+    interfaces: ["Sites et services AD > Répliquer maintenant"]
+  ad.replication.parametres.modifier:
+    niveau: N3
+    type: modification
+    cible: machine
+    description: Options de réplication d'un DC (cohérence stricte, désactivation entrante ou sortante...).
+    parametres: { option: texte, valeur: valeur }
+    commandes: ["repadmin /options", "repadmin /regkey", "Set-ItemProperty HKLM:\\SYSTEM\\CurrentControlSet\\Services\\NTDS\\Parameters"]
+  ad.restauration_autoritaire:
+    niveau: N3
+    type: modification
+    cible: machine
+    parametres: { objet: texte }
+    commandes: ["ntdsutil authoritative restore", "msDFSR-Options = 1 (SYSVOL D4)"]
+
+  # --- Stratégies de groupe --------------------------------------------------
+  gpo.lire:
+    niveau: N2
+    type: lecture
+    cible: gpo
+    description: Paramètres, liens, filtrage de sécurité, filtre WMI, état.
+    commandes: ["Get-GPO", "Get-GPOReport", "Get-GPInheritance"]
+    interfaces: ["Gestion des stratégies de groupe"]
+  gpo.permissions.lire:
+    niveau: N2
+    type: lecture
+    cible: gpo
+    commandes: ["Get-GPPermission"]
+    interfaces: ["GPMC > Étendue > Filtrage de sécurité", "GPMC > Délégation"]
+  gpo.permissions.modifier:
+    niveau: N2
+    type: modification
+    cible: gpo
+    parametres: { compte: texte, droit: "GpoApply | GpoRead | GpoEdit | Aucun" }
+    commandes: ["Set-GPPermission"]
+    interfaces: ["GPMC > Étendue > Filtrage de sécurité"]
+  gpo.lien.modifier:
+    niveau: N2
+    type: modification
+    cible: gpo
+    parametres: { ou: texte, operation: "ajouter | supprimer | appliquer | desactiver" }
+    commandes: ["New-GPLink", "Set-GPLink", "Remove-GPLink"]
+    interfaces: ["GPMC > Lier un objet de stratégie de groupe existant"]
+  gpo.heritage.modifier:
+    niveau: N2
+    type: modification
+    cible: annuaire
+    parametres: { ou: texte, bloquer: booleen }
+    commandes: ["Set-GPInheritance"]
+  gpo.modifier:
+    niveau: N2
+    type: modification
+    cible: gpo
+    description: Modifier un paramètre de la GPO.
+    parametres: { parametre: texte, valeur: valeur }
+    commandes: ["Set-GPRegistryValue", "Set-GPPrefRegistryValue"]
+    interfaces: ["Éditeur de gestion des stratégies de groupe"]
+  gpo.creer:
+    niveau: N2
+    type: modification
+    cible: annuaire
+    commandes: ["New-GPO", "Copy-GPO"]
+  gpo.supprimer:
+    niveau: N2
+    type: modification
+    cible: gpo
+    commandes: ["Remove-GPO"]
+
+  # --- Machines (postes, serveurs, DC) ---------------------------------------
+  machine.ouvrir_session_admin:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    description: >
+      Ouvrir une session d'administration sur la machine (prise en main à
+      distance, console). Sans relation d'approbation, seule une session
+      locale (mot de passe LAPS) ou en identifiants mis en cache, réseau
+      débranché, est possible.
+    parametres: { mode: "distant | local_laps | cache_hors_reseau" }
+    commandes: ["Enter-PSSession", "mstsc", "Invoke-Command"]
+    interfaces: ["Prise en main à distance", "Console physique"]
+  machine.journal.lire:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    description: Journaux d'événements (Système, Application, Sécurité, Service d'annuaire, Serveur DNS, DFS Replication...).
+    parametres: { journal: texte, id: entier, source: texte, depuis: duree }
+    commandes: ["Get-WinEvent", "Get-EventLog", "wevtutil qe"]
+    interfaces: ["Observateur d'événements"]
+  machine.services.lire:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    commandes: ["Get-Service", "sc query", "sc qfailure"]
+    interfaces: ["Services", "Gestion de l'ordinateur > Services"]
+  machine.service.demarrer:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { service: texte }
+    commandes: ["Start-Service", "net start", "sc start"]
+    interfaces: ["Services > Démarrer"]
+  machine.service.arreter:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { service: texte }
+    commandes: ["Stop-Service", "net stop", "sc stop"]
+    interfaces: ["Services > Arrêter"]
+  machine.service.redemarrer:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { service: texte }
+    commandes: ["Restart-Service"]
+    interfaces: ["Services > Redémarrer"]
+  machine.processus.lire:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    commandes: ["Get-Process", "tasklist"]
+    interfaces: ["Gestionnaire des tâches"]
+  machine.sessions.lire:
+    niveau: { poste: N2, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    description: Sessions ouvertes sur la machine (actives et déconnectées).
+    commandes: ["query user /server:", "quser /server:", "qwinsta /server:"]
+  machine.session.fermer:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { utilisateur: utilisateur }
+    commandes: ["logoff /server:", "rwinsta /server:", "Invoke-CimMethod Win32_OperatingSystem Win32Shutdown"]
+  machine.redemarrer:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    commandes: ["Restart-Computer", "shutdown /r"]
+    interfaces: ["Démarrer > Redémarrer"]
+  machine.disques.lire:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    commandes: ["Get-Volume", "Get-PSDrive", "Get-CimInstance Win32_LogicalDisk", "fsutil volume diskfree"]
+    interfaces: ["Explorateur > Ce PC", "Gestion des disques"]
+  machine.fichiers.lister:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    description: Lister un dossier (tailles comprises avec -Recurse ou l'analyse de l'espace disque).
+    parametres: { chemin: texte, recursif: booleen }
+    commandes: ["Get-ChildItem", "dir"]
+    interfaces: ["Explorateur", "Paramètres > Stockage"]
+  machine.fichiers.lire:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    parametres: { chemin: texte }
+    commandes: ["Get-Content", "type"]
+    interfaces: ["Bloc-notes", "CMTrace"]
+  machine.fichiers.supprimer:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { chemin: texte, recursif: booleen }
+    commandes: ["Remove-Item", "del", "rd /s"]
+    interfaces: ["Explorateur > Supprimer"]
+  machine.fichiers.modifier:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    description: Modifier un fichier texte (configuration d'application, fichier hosts...).
+    parametres: { chemin: texte, contenu: texte }
+    commandes: ["Set-Content", "Add-Content", "notepad"]
+    interfaces: ["Bloc-notes"]
+  machine.nettoyage_disque:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    description: Nettoyage de disque Windows (fichiers temporaires, corbeille, cache de mises à jour).
+    parametres: { categories: liste }
+    commandes: ["cleanmgr", "Clear-RecycleBin"]
+    interfaces: ["Paramètres > Stockage > Fichiers temporaires"]
+  machine.reseau.lire:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    description: Configuration IP (adresse, passerelle, serveurs DNS, bail DHCP).
+    commandes: ["ipconfig /all", "Get-NetIPConfiguration", "Get-DnsClientServerAddress"]
+    interfaces: ["Paramètres réseau > Propriétés"]
+  machine.reseau.renouveler:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    commandes: ["ipconfig /renew", "ipconfig /release"]
+  machine.reseau.configurer:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    description: Configuration IP statique ou serveurs DNS de la carte réseau.
+    parametres: { ip: texte, dns: liste }
+    commandes: ["Set-DnsClientServerAddress", "New-NetIPAddress", "netsh interface ip set"]
+    interfaces: ["Propriétés de la carte > IPv4"]
+  machine.dns.vider_cache:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: modification
+    cible: machine
+    commandes: ["ipconfig /flushdns", "Clear-DnsClientCache"]
+  machine.dns.cache.lire:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    commandes: ["ipconfig /displaydns", "Get-DnsClientCache"]
+  machine.dns.enregistrer:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: modification
+    cible: machine
+    commandes: ["ipconfig /registerdns", "Register-DnsClient"]
+  machine.dns.resoudre:
+    niveau: { poste: N2, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    description: Résolution DNS depuis la machine, avec le serveur DNS de son choix.
+    parametres: { nom: texte, type: texte, serveur: texte }
+    commandes: ["Resolve-DnsName", "nslookup"]
+  machine.ping:
+    niveau: { poste: N1, serveur: N1, dc: N1 }
+    type: lecture
+    cible: machine
+    description: Joindre une destination depuis la machine (par nom ou par adresse).
+    parametres: { destination: texte }
+    commandes: ["ping", "Test-Connection", "tracert"]
+  machine.test_port:
+    niveau: { poste: N2, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    parametres: { destination: texte, port: entier }
+    commandes: ["Test-NetConnection -Port", "portqry"]
+  machine.lecteurs.lire:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    description: Lecteurs réseau de la session de l'utilisateur.
+    commandes: ["net use", "Get-PSDrive -PSProvider FileSystem", "Get-SmbMapping"]
+    interfaces: ["Explorateur > Ce PC"]
+  machine.gpupdate:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    commandes: ["gpupdate /force", "Invoke-GPUpdate"]
+  machine.gpresult:
+    niveau: { poste: N2, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    description: Jeu de stratégies résultant (ordinateur et utilisateur), GPO filtrées et raison du filtrage.
+    parametres: { portee: "ordinateur | utilisateur" }
+    commandes: ["gpresult /r", "gpresult /scope computer /r", "gpresult /h", "Get-GPResultantSetOfPolicy"]
+    interfaces: ["Gestion des stratégies de groupe > Résultats"]
+  machine.canal_securise.tester:
+    niveau: { poste: N2, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    parametres: { domaine: texte }
+    commandes: ["Test-ComputerSecureChannel", "nltest /sc_query:", "nltest /sc_verify:"]
+  machine.canal_securise.reparer:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    description: Réinitialiser le mot de passe machine depuis la machine (le compte AD doit exister et être activé).
+    commandes: ["Test-ComputerSecureChannel -Repair", "Reset-ComputerMachinePassword", "nltest /sc_reset:"]
+  machine.domaine.quitter:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    commandes: ["Remove-Computer", "netdom remove"]
+    interfaces: ["Propriétés système > Modifier > Groupe de travail"]
+  machine.domaine.joindre:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { ou: texte }
+    commandes: ["Add-Computer", "netdom join"]
+    interfaces: ["Propriétés système > Modifier > Domaine"]
+  machine.heure.lire:
+    niveau: { poste: N2, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    description: Source et état de la synchronisation horaire, décalage avec une référence.
+    parametres: { vue: "status | source | configuration | peers | stripchart", reference: machine }
+    commandes: ["w32tm /query /status", "w32tm /query /source", "w32tm /query /configuration", "w32tm /query /peers", "w32tm /stripchart /computer:", "w32tm /monitor"]
+  machine.heure.afficher:
+    niveau: { poste: N1, serveur: N1, dc: N1 }
+    type: lecture
+    cible: machine
+    description: Heure affichée par la machine.
+    commandes: ["Get-Date", "time /t", "net time \\\\"]
+    interfaces: ["Barre des tâches > Horloge"]
+  machine.heure.configurer:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { syncfromflags: texte, manualpeerlist: texte }
+    commandes: ["w32tm /config"]
+  machine.heure.resynchroniser:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    commandes: ["w32tm /resync", "w32tm /resync /rediscover"]
+  machine.heure.definir_manuellement:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { decalage: duree }
+    commandes: ["Set-Date", "date", "time"]
+    interfaces: ["Paramètres > Date et heure"]
+  machine.kerberos.lister:
+    niveau: { poste: N2, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    parametres: { session: texte }
+    commandes: ["klist", "klist -li 0x3e7"]
+  machine.kerberos.purger:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { session: texte }
+    commandes: ["klist purge", "klist -li 0x3e7 purge"]
+  machine.logiciels.lire:
+    niveau: { poste: N1, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    description: Logiciels et redistribuables installés (clés Uninstall).
+    commandes: ["Get-Package", "Get-ItemProperty HKLM:\\SOFTWARE\\...\\Uninstall\\*", "winget list"]
+    interfaces: ["Paramètres > Applications installées", "Programmes et fonctionnalités"]
+  machine.logiciel.installer:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { produit: texte }
+    commandes: ["msiexec /i", "Start-Process setup.exe"]
+  machine.registre.lire:
+    niveau: { poste: N2, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    parametres: { cle: texte }
+    commandes: ["Get-ItemProperty HKLM:", "reg query"]
+    interfaces: ["regedit"]
+  machine.registre.modifier:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { cle: texte, valeur: valeur }
+    commandes: ["Set-ItemProperty HKLM:", "reg add"]
+    interfaces: ["regedit"]
+  machine.admin_local.ajouter:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    description: Ajouter un compte au groupe Administrateurs local.
+    parametres: { compte: texte }
+    commandes: ["Add-LocalGroupMember -Group Administrateurs", "net localgroup Administrateurs /add"]
+    interfaces: ["Gestion de l'ordinateur > Groupes locaux"]
+  machine.antivirus.desactiver:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    commandes: ["Set-MpPreference -DisableRealtimeMonitoring $true"]
+    interfaces: ["Console antivirus > Protection en temps réel"]
+  machine.certificats.lire:
+    niveau: { poste: N2, serveur: N2, dc: N2 }
+    type: lecture
+    cible: machine
+    description: Magasin de certificats de l'ordinateur. Les certificats archivés n'apparaissent qu'avec le paramètre `archives`.
+    parametres: { magasin: texte, archives: booleen }
+    commandes: ["Get-ChildItem Cert:\\LocalMachine\\My", "certutil -store my", "certutil -store -v my"]
+    interfaces: ["certlm.msc (Affichage > Options > Certificats archivés)"]
+  machine.certificat.supprimer:
+    niveau: { poste: N2, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { empreinte: texte }
+    commandes: ["Remove-Item Cert:\\LocalMachine\\My\\<empreinte>", "certutil -delstore my"]
+
+  # --- Impression ------------------------------------------------------------
+  imprimante.file.lire:
+    niveau: N1
+    type: lecture
+    cible: file_impression
+    commandes: ["Get-PrintJob", "Get-Printer -ComputerName"]
+    interfaces: ["Gestion de l'impression > Files d'attente"]
+  imprimante.file.vider:
+    niveau: N1
+    type: modification
+    cible: file_impression
+    description: Annuler tous les documents d'une file partagée (ceux de tous les utilisateurs).
+    commandes: ["Get-PrintJob | Remove-PrintJob"]
+    interfaces: ["Gestion de l'impression > Annuler tous les documents"]
+  imprimante.page_test:
+    niveau: N1
+    type: lecture
+    cible: machine
+    parametres: { imprimante: texte }
+    commandes: ["Invoke-CimMethod Win32_Printer PrintTestPage"]
+    interfaces: ["Propriétés de l'imprimante > Imprimer une page de test"]
+  imprimante.pilote.supprimer:
+    niveau: { poste: N1, serveur: N2, dc: N3 }
+    type: modification
+    cible: machine
+    parametres: { pilote: texte }
+    commandes: ["Remove-PrinterDriver", "printui /s /t2"]
+
+  # --- DNS -------------------------------------------------------------------
+  dns.zone.lire:
+    niveau: N2
+    type: lecture
+    cible: zone_dns
+    description: Propriétés de la zone (type, réplication, mises à jour, vieillissement).
+    parametres: { serveur: machine }
+    commandes: ["Get-DnsServerZone", "Get-DnsServerZoneAging", "dnscmd /zoneinfo"]
+    interfaces: ["Gestionnaire DNS > Propriétés de la zone"]
+  dns.enregistrement.lire:
+    niveau: N2
+    type: lecture
+    cible: zone_dns
+    description: Enregistrements d'une zone sur un serveur DNS donné, horodatage compris (0 = statique).
+    parametres: { serveur: machine, nom: texte, type: texte }
+    commandes: ["Get-DnsServerResourceRecord", "dnscmd /enumrecords"]
+    interfaces: ["Gestionnaire DNS > zone (Affichage > Avancé)"]
+  dns.enregistrement.ajouter:
+    niveau: N2
+    type: modification
+    cible: zone_dns
+    parametres: { nom: texte, type: texte, donnees: texte }
+    commandes: ["Add-DnsServerResourceRecordA", "Add-DnsServerResourceRecordCName", "dnscmd /recordadd"]
+  dns.enregistrement.supprimer:
+    niveau: N2
+    type: modification
+    cible: zone_dns
+    parametres: { nom: texte, type: texte, donnees: texte }
+    commandes: ["Remove-DnsServerResourceRecord", "dnscmd /recorddelete"]
+  dns.enregistrement.modifier:
+    niveau: N2
+    type: modification
+    cible: zone_dns
+    parametres: { nom: texte, type: texte, ancienne: texte, nouvelle: texte }
+    commandes: ["Set-DnsServerResourceRecord"]
+  dns.cache_serveur.vider:
+    niveau: N2
+    type: modification
+    cible: machine
+    commandes: ["Clear-DnsServerCache", "dnscmd /clearcache"]
+  dns.redirecteurs.lire:
+    niveau: N2
+    type: lecture
+    cible: machine
+    description: Redirecteurs et redirecteurs conditionnels d'un serveur DNS.
+    commandes: ["Get-DnsServerForwarder", "Get-DnsServerZone (ConditionalForwarder)"]
+    interfaces: ["Gestionnaire DNS > Redirecteurs conditionnels"]
+  dns.redirecteurs.modifier:
+    niveau: N3
+    type: modification
+    cible: machine
+    parametres: { zone: texte, serveurs: liste }
+    commandes: ["Set-DnsServerConditionalForwarderZone", "Set-DnsServerForwarder"]
+  dns.nettoyage.configurer:
+    niveau: N3
+    type: modification
+    cible: zone_dns
+    parametres: { non_actualisation: duree, actualisation: duree }
+    commandes: ["Set-DnsServerZoneAging", "Set-DnsServerScavenging"]
+  dns.nettoyage.lancer:
+    niveau: N3
+    type: modification
+    cible: machine
+    commandes: ["Start-DnsServerScavenging", "dnscmd /startscavenging"]
+
+  # --- DHCP ------------------------------------------------------------------
+  dhcp.etendue.lire:
+    niveau: N2
+    type: lecture
+    cible: serveur_dhcp
+    description: Étendues, plages, exclusions, durée de bail, options, statistiques d'occupation.
+    parametres: { etendue: texte }
+    commandes: ["Get-DhcpServerv4Scope", "Get-DhcpServerv4ScopeStatistics", "Get-DhcpServerv4ExclusionRange", "Get-DhcpServerv4OptionValue", "netsh dhcp server show scope"]
+    interfaces: ["Console DHCP > Étendue > Propriétés"]
+  dhcp.baux.lire:
+    niveau: N2
+    type: lecture
+    cible: serveur_dhcp
+    parametres: { etendue: texte }
+    commandes: ["Get-DhcpServerv4Lease", "Get-DhcpServerv4Reservation"]
+    interfaces: ["Console DHCP > Baux d'adresse"]
+  dhcp.bail.supprimer:
+    niveau: N2
+    type: modification
+    cible: serveur_dhcp
+    description: Supprimer un ou plusieurs baux.
+    parametres: { etendue: texte, adresses: liste, tous: booleen }
+    commandes: ["Remove-DhcpServerv4Lease"]
+    interfaces: ["Console DHCP > Baux d'adresse > Supprimer"]
+  dhcp.etendue.modifier:
+    niveau: N2
+    type: modification
+    cible: serveur_dhcp
+    parametres: { etendue: texte, duree_bail: duree, debut: texte, fin: texte }
+    commandes: ["Set-DhcpServerv4Scope"]
+    interfaces: ["Console DHCP > Étendue > Propriétés"]
+  dhcp.exclusion.modifier:
+    niveau: N2
+    type: modification
+    cible: serveur_dhcp
+    parametres: { etendue: texte, operation: "ajouter | supprimer", debut: texte, fin: texte }
+    commandes: ["Add-DhcpServerv4ExclusionRange", "Remove-DhcpServerv4ExclusionRange"]
+  dhcp.option.modifier:
+    niveau: N2
+    type: modification
+    cible: serveur_dhcp
+    parametres: { etendue: texte, option: entier, valeur: liste }
+    commandes: ["Set-DhcpServerv4OptionValue"]
+    interfaces: ["Console DHCP > Options d'étendue"]
+  dhcp.etendue.supprimer:
+    niveau: N2
+    type: modification
+    cible: serveur_dhcp
+    parametres: { etendue: texte }
+    commandes: ["Remove-DhcpServerv4Scope"]
+
+  # --- Approbations ----------------------------------------------------------
+  ad.approbation.lire:
+    niveau: N2
+    type: lecture
+    cible: domaine
+    description: Approbations du domaine (type, sens, transitivité, authentification sélective, filtrage SID).
+    commandes: ["Get-ADTrust", "nltest /domain_trusts", "netdom query trust"]
+    interfaces: ["Domaines et approbations AD > Propriétés > Approbations"]
+  ad.approbation.verifier:
+    niveau: N2
+    type: lecture
+    cible: approbation
+    commandes: ["netdom trust /verify", "nltest /sc_verify:", "nltest /sc_query:"]
+    interfaces: ["Propriétés de l'approbation > Valider (sans réinitialisation)"]
+  ad.approbation.reinitialiser_mdp:
+    niveau: N3
+    type: modification
+    cible: approbation
+    description: Réinitialiser le secret de l'approbation d'un côté (netdom /resetOneSide) ou des deux (validation avec les identifiants de l'autre domaine).
+    parametres: { cote: "local | distant | les_deux", mot_de_passe: texte }
+    commandes: ["netdom trust /resetOneSide /passwordT:", "netdom trust /reset"]
+    interfaces: ["Propriétés de l'approbation > Valider > Réinitialiser"]
+  ad.approbation.supprimer:
+    niveau: N3
+    type: modification
+    cible: approbation
+    commandes: ["netdom trust /remove"]
+    interfaces: ["Domaines et approbations AD > Supprimer l'approbation"]
+  ad.approbation.creer:
+    niveau: N3
+    type: modification
+    cible: approbation
+    commandes: ["netdom trust /add"]
+    interfaces: ["Assistant Nouvelle approbation"]
+  ad.approbation.filtrage_sid.modifier:
+    niveau: N3
+    type: modification
+    cible: approbation
+    parametres: { quarantaine: booleen, historique_sid: booleen }
+    commandes: ["netdom trust /quarantine:", "netdom trust /enablesidhistory:"]
+  ad.approbation.authentification_selective.modifier:
+    niveau: N3
+    type: modification
+    cible: approbation
+    parametres: { active: booleen }
+    commandes: ["netdom trust /SelectiveAUTH:"]
+    interfaces: ["Propriétés de l'approbation > Niveau d'authentification"]
+
+  # --- PKI et web ------------------------------------------------------------
+  web.ouvrir:
+    niveau: N1
+    type: lecture
+    cible: machine
+    description: Ouvrir une adresse depuis une machine (navigateur ou Invoke-WebRequest) et voir l'erreur éventuelle.
+    parametres: { url: texte }
+    commandes: ["Invoke-WebRequest", "curl.exe -v", "Start-Process msedge"]
+    interfaces: ["Navigateur"]
+  iis.liaisons.lire:
+    niveau: N2
+    type: lecture
+    cible: site_web
+    description: Liaisons du site, empreinte du certificat lié au port 443.
+    commandes: ["Get-WebBinding", "Get-IISSiteBinding", "netsh http show sslcert"]
+    interfaces: ["Gestionnaire IIS > Liaisons"]
+  iis.liaison.modifier:
+    niveau: N3
+    type: modification
+    cible: site_web
+    parametres: { empreinte: texte, nom_hote: texte }
+    commandes: ["(Get-WebBinding).AddSslCertificate", "netsh http update sslcert", "New-IISSiteBinding"]
+    interfaces: ["Gestionnaire IIS > Liaisons > Modifier > Certificat SSL"]
+  iis.site.redemarrer:
+    niveau: N2
+    type: modification
+    cible: site_web
+    commandes: ["Restart-WebAppPool", "iisreset", "Stop-Website / Start-Website"]
+  iis.reliure_auto.activer:
+    niveau: N3
+    type: modification
+    cible: machine
+    description: Activer la nouvelle liaison automatique du certificat renouvelé (tâche « Certificate Rebind » d'IIS).
+    commandes: ["Enable-ScheduledTask '\\Microsoft\\Windows\\CertificateServicesClient\\IIS-AutoCertRebind'"]
+    interfaces: ["Gestionnaire IIS > Certificats de serveur > Activer la nouvelle liaison automatique"]
+  pki.ca.lire:
+    niveau: N2
+    type: lecture
+    cible: machine
+    description: État de l'autorité, validité de ses certificats et de ses listes de révocation.
+    commandes: ["certutil -CAInfo", "certutil -URL", "pkiview.msc"]
+    interfaces: ["Autorité de certification", "PKI d'entreprise (pkiview)"]
+  pki.certificat.demander:
+    niveau: N3
+    type: modification
+    cible: machine
+    parametres: { modele: texte, sujet: texte }
+    commandes: ["Get-Certificate -Template", "certreq -new"]
+  pki.certificat.autosigne:
+    niveau: N3
+    type: modification
+    cible: machine
+    parametres: { sujet: texte }
+    commandes: ["New-SelfSignedCertificate"]
+  pki.certificat.revoquer:
+    niveau: N3
+    type: modification
+    cible: machine
+    parametres: { numero_serie: texte }
+    commandes: ["certutil -revoke"]
+  pki.ca.renouveler:
+    niveau: N3
+    type: modification
+    cible: machine
+    commandes: ["certutil -renewCert"]
+    interfaces: ["Autorité de certification > Renouveler le certificat de l'AC"]
+
+  # --- Déploiement logiciel -------------------------------------------------
+  deploiement.lire:
+    niveau: N2
+    type: lecture
+    cible: deploiement
+    description: État du déploiement par poste (réussite, échec, code de sortie, en attente), regroupable par socle, site ou code.
+    parametres: { regroupement: "socle | site | code" }
+    commandes: ["Get-CMDeploymentStatus"]
+    interfaces: ["Console de déploiement > Surveillance"]
+  deploiement.application.lire:
+    niveau: N2
+    type: lecture
+    cible: application
+    description: Type de déploiement, ligne de commande, règle de détection, dépendances, contenu.
+    commandes: ["Get-CMApplication", "Get-CMDeploymentType"]
+    interfaces: ["Console de déploiement > Bibliothèque > Applications"]
+  deploiement.relancer:
+    niveau: { poste: N2, echecs: N3, tous: N3 }
+    type: modification
+    cible: deploiement
+    description: Relancer l'évaluation et l'installation sur un poste, sur les postes en échec ou sur toute la cible.
+    parametres: { portee: "poste | echecs | tous", poste: machine }
+    commandes: ["Invoke-CMClientAction", "Invoke-CMDeploymentReevaluation"]
+    interfaces: ["Console de déploiement > Relancer"]
+  deploiement.contenu.redistribuer:
+    niveau: N2
+    type: modification
+    cible: application
+    commandes: ["Start-CMContentDistribution", "Update-CMDistributionPoint"]
+  deploiement.dependance.ajouter:
+    niveau: N3
+    type: modification
+    cible: application
+    parametres: { dependance: application }
+    commandes: ["Add-CMDeploymentTypeDependency"]
+    interfaces: ["Type de déploiement > Dépendances > Ajouter"]
+  deploiement.cible.modifier:
+    niveau: N3
+    type: modification
+    cible: deploiement
+    parametres: { groupe: groupe, operation: "ajouter | retirer | remplacer" }
+    interfaces: ["Propriétés du déploiement > Collection"]
+  deploiement.creer:
+    niveau: N3
+    type: modification
+    cible: application
+    parametres: { groupe: texte, obligatoire: booleen, redemarrage: booleen }
+    commandes: ["New-CMApplicationDeployment"]
+  deploiement.supprimer:
+    niveau: N3
+    type: modification
+    cible: deploiement
+    commandes: ["Remove-CMApplicationDeployment"]
+  deploiement.desinstaller:
+    niveau: N3
+    type: modification
+    cible: application
+    parametres: { portee: texte }
+    interfaces: ["Console de déploiement > Déployer la désinstallation"]
+  socle.image.modifier:
+    niveau: N3
+    type: modification
+    cible: aucune
+    description: Modifier le master (image de référence) des postes.
+    interfaces: ["Atelier socle > Séquence de tâches"]
+
+  # --- Virtualisation ---------------------------------------------------------
+  virtualisation.vm.lire:
+    niveau: N2
+    type: lecture
+    cible: vm
+    description: État de la machine virtuelle et de son hôte.
+    interfaces: ["Console de virtualisation"]
+  virtualisation.vm.demarrer:
+    niveau: N3
+    type: modification
+    cible: vm
+    interfaces: ["Console de virtualisation > Démarrer"]
+  virtualisation.vm.restaurer_instantane:
+    niveau: N3
+    type: modification
+    cible: vm
+    parametres: { instantane: texte }
+    interfaces: ["Console de virtualisation > Instantanés > Restaurer"]
+
+  # --- Tickets et communication ---------------------------------------------
+  ticket.lire:
+    niveau: N1
+    type: lecture
+    cible: ticket
+    interfaces: ["Outil de tickets"]
+  ticket.question:
+    niveau: N1
+    type: communication
+    cible: ticket
+    description: Poser une question au demandeur. Le moteur rapproche la question d'une intention (catalogue/questions.yaml).
+    parametres: { intention: texte }
+  ticket.verifier_identite:
+    niveau: N1
+    type: communication
+    cible: ticket
+    description: Vérifier l'identité de l'appelant avant une action sur son compte.
+    parametres: { methode: "rappel_annuaire | matricule | manager" }
+  ticket.demander_action_utilisateur:
+    niveau: N1
+    type: communication
+    cible: ticket
+    description: Demander à l'utilisateur de faire quelque chose et de dire ce qu'il observe. Le moteur applique l'effet sur le monde, puis répond.
+    parametres: { action: "fermer_session | redemarrer_poste | reessayer_connexion | changer_mot_de_passe | imprimer | lancer_application | ouvrir_url | ouvrir_lecteur" }
+  ticket.lier:
+    niveau: N1
+    type: communication
+    cible: ticket
+    description: Rattacher des tickets à un ticket parent (même cause).
+    parametres: { tickets: liste }
+  ticket.incident_majeur.declarer:
+    niveau: N2
+    type: communication
+    cible: ticket
+    parametres: { impact: texte }
+  ticket.communiquer:
+    niveau: N2
+    type: communication
+    cible: aucune
+    description: "Message à une population (site, service, tous) : bandeau, courriel, SMS de crise."
+    parametres: { population: texte, message: texte }
+  ticket.mettre_en_attente:
+    niveau: N1
+    type: communication
+    cible: ticket
+    parametres: { motif: texte }
+  ticket.escalader:
+    niveau: N1
+    type: communication
+    cible: ticket
+    parametres: { equipe: equipe, note: texte }
+  ticket.cloturer:
+    niveau: N1
+    type: communication
+    cible: ticket
+    parametres: { note: texte }
+  equipe.contacter:
+    niveau: N1
+    type: communication
+    cible: equipe
+    description: Demander une information ou une action à une autre équipe sans lui transférer le ticket.
+    parametres: { message: texte }
+  document.consulter:
+    niveau: N1
+    type: lecture
+    cible: document
+    description: Base de connaissances, calendrier des changements, notes de version.
+  temps.attendre:
+    niveau: N1
+    type: lecture
+    cible: aucune
+    description: Laisser passer du temps simulé pour observer le comportement.
+    parametres: { duree: duree }

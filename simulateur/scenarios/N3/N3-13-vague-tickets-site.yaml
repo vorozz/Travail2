@@ -1,0 +1,510 @@
+schema: scenario/1
+id: N3-13
+titre: Vague de tickets, les utilisateurs d'un site ne peuvent plus se connecter
+niveau: N3
+temps_cible: 45m
+environnement: vellane
+horloge: 2026-11-24T08:35:00+01:00
+competences: [incident_majeur, correlation, localisateur_de_dc, dns_client, dhcp_options, gestion_du_changement]
+
+resume: >
+  Depuis 8 h, l'agence de Lyon est à l'arrêt : ouverture de session refusée
+  pour qui n'a pas d'identifiants en cache, plus de messagerie, de partages
+  ni d'Internet pour les autres. DC-LYO-01 est éteint pour une maintenance
+  de son hôte annoncée « sans impact », et l'option DHCP 006 de Lyon ne
+  donne que lui comme serveur DNS : les postes ne résolvent plus rien et ne
+  basculent pas vers Paris. Plusieurs pistes trompeuses (GPO modifiée hier,
+  mise à jour antivirus, mot de passe expiré, lien WAN) ; un ticket de Paris
+  sans rapport dans la file.
+cause_racine: >
+  CHG0004701 : HV-LYO-01 arrêté de 06:00 à 10:00 (remplacement de carte
+  mère), DC-LYO-01 éteint, pas de cluster à Lyon. L'étendue LYO-Postes
+  distribue l'option 006 = 10.20.1.10 seul. Sans serveur DNS joignable, le
+  localisateur de DC ne trouve pas les DC de Paris, pourtant joignables par
+  le WAN.
+
+tickets:
+  INC0032001:
+    ouvert: -31m
+    demandeur: jbaron
+    poste: PC-LYO-0003
+    canal: telephone
+    priorite: P2
+    objet: Impossible d'ouvrir une session à l'accueil
+    description: |
+      Bonjour, je suis intérimaire à l'accueil de Lyon depuis ce matin.
+      Quand je tape mon identifiant : « Aucun serveur d'accès n'est
+      actuellement disponible pour traiter la demande d'ouverture de
+      session. »
+    reponses:
+      depuis_quand: Depuis 8 h, mon arrivée.
+      autre_poste: C'est mon premier jour, je n'ai jamais ouvert de session nulle part.
+      collegues: Les collègues disent que plus rien ne marche chez eux non plus.
+      par_defaut: Je ne sais pas, je viens d'arriver.
+    retours:
+      reessayer_connexion: &retour_lyon
+        - si: [{ chemin: postes.PC-LYO-0003.reseau.dns, contient_un: [10.10.1.10, 10.10.1.11] }]
+          message: Ça marche, la session s'ouvre (c'est un peu lent).
+        - si: [{ chemin: controleurs.DC-LYO-01.allume, egal: true }]
+          message: Ça y est, ça marche.
+        - message: Toujours « Aucun serveur d'accès n'est actuellement disponible ».
+      redemarrer_poste: *retour_lyon
+  INC0032003:
+    ouvert: -26m
+    demandeur: ogautier
+    poste: PC-LYO-0121
+    canal: telephone
+    priorite: P2
+    objet: Outlook déconnecté, Teams et Internet ne marchent pas
+    description: |
+      J'ai pu ouvrir ma session mais Outlook est « Déconnecté », Teams tourne
+      dans le vide et aucun site Internet ne s'ouvre.
+    reponses:
+      depuis_quand: Depuis que je suis arrivée, 7 h 45.
+      collegues: Tout le plateau commercial a le même problème.
+      deja_essaye: J'ai redémarré deux fois.
+      par_defaut: Je ne sais pas.
+    retours:
+      redemarrer_poste:
+        - si: [{ chemin: postes.PC-LYO-0121.reseau.dns, contient_un: [10.10.1.10, 10.10.1.11] }]
+          message: Après redémarrage, Outlook se connecte, Teams aussi. C'est revenu !
+        - si: [{ chemin: controleurs.DC-LYO-01.allume, egal: true }]
+          message: C'est revenu.
+        - message: Toujours rien après le redémarrage.
+  INC0032006:
+    ouvert: -20m
+    demandeur: mrobin
+    poste: PC-LYO-0133
+    canal: portail
+    priorite: P3
+    objet: "Lecteur S: disparu, planning inaccessible"
+    description: |
+      Le lecteur S: n'est plus là et l'application de planning sur l'intranet
+      ne s'ouvre pas.
+    reponses:
+      par_defaut: Pareil que les autres, je pense.
+  INC0032008:
+    ouvert: -14m
+    demandeur: lclement
+    poste: PC-LYO-0140
+    canal: telephone
+    priorite: P3
+    objet: Je crois que mon compte est bloqué
+    description: |
+      Outlook refuse mon mot de passe en boucle. Je pense que mon compte est
+      bloqué. J'avais reçu un message disant que mon mot de passe allait
+      expirer.
+    reponses:
+      depuis_quand: Ce matin.
+      collegues: Mes collègues ont aussi des problèmes d'Outlook, je crois.
+      par_defaut: Je ne sais pas.
+  INC0032011:
+    ouvert: -6m
+    demandeur: fmorel
+    poste: PC-LYO-0160
+    canal: telephone
+    priorite: P1
+    objet: Toute l'agence de Lyon est bloquée
+    description: |
+      Toute l'agence est bloquée depuis ce matin, 45 personnes. On reçoit des
+      clients à 9 h et on ne peut rien faire. C'est urgent !
+    reponses:
+      impact: 45 personnes, l'accueil, les commerciaux, la logistique. Les clients arrivent à 9 h.
+      depuis_quand: Les premiers sont arrivés vers 7 h 45, rien n'a jamais marché ce matin.
+      par_defaut: Je ne sais pas, mais il faut faire vite.
+  INC0032012:
+    ouvert: -5m
+    demandeur: agarcia
+    poste: PC-PAR-0234
+    canal: portail
+    priorite: P4
+    objet: Second écran qui clignote
+    description: |
+      Mon second écran clignote par moments depuis ce matin. Ça n'empêche pas
+      de travailler.
+    reponses:
+      localisation: Au siège, à Paris.
+      par_defaut: Je n'ai rien changé.
+
+monde:
+  utilisateurs:
+    jbaron:
+      nom: Julien Baron
+      matricule: V02904
+      service: Accueil
+      fonction: Agent d'accueil (intérim)
+      site: Lyon
+      ou: OU=Utilisateurs,OU=Lyon
+      poste: PC-LYO-0003
+      groupes: [GG_Tous_Lyon]
+      mdp: { dernier_changement: -15h, version: 1 }
+      origine: DC-PAR-01
+      cree: -15h
+    lclement:
+      mdp: { dernier_changement: -91j, version: 8 }
+  controleurs:
+    DC-LYO-01:
+      allume: false
+      arret: -2h33m
+  postes:
+    PC-LYO-0003:
+      identifiants_en_cache: []
+      journaux:
+        - evenement: netlogon/5719
+          t: -32m
+          donnees: { domaine: VELLANE, raison: Aucun serveur d’accès n’est actuellement disponible pour traiter la demande d’ouverture de session. }
+    PC-LYO-0121:
+      journaux:
+        - evenement: dns-client/1014
+          ref: premier_1014
+          t: -54m
+          donnees: { nom: _ldap._tcp.Lyon._sites.dc._msdcs.vellane.local }
+        - evenement: dns-client/1014
+          ref: dns_timeout
+          t: -50m
+          repeter: { intervalle: 4m, jusqu_a: -1m }
+          donnees: { nom: outlook.office365.com }
+        - evenement: dns-client/1014
+          t: -48m
+          repeter: { intervalle: 9m, jusqu_a: -2m }
+          donnees: { nom: SRV-FIC-01.vellane.local }
+        - evenement: netlogon/5719
+          t: -52m
+          donnees: { domaine: VELLANE, raison: Aucun serveur d’accès n’est actuellement disponible pour traiter la demande d’ouverture de session. }
+        - evenement: windowsupdate/19
+          ref: maj_antivirus
+          t: -1h33m
+          donnees: { mise_a_jour: "Mise à jour de la veille de sécurité pour l’antivirus Bouclier 12 (version 1.421.97.0)" }
+    PC-LYO-0133:
+      journaux:
+        - evenement: dns-client/1014
+          t: -45m
+          repeter: { intervalle: 6m, jusqu_a: -1m }
+          donnees: { nom: SRV-FIC-01.vellane.local }
+  gpo:
+    GPO_C_Postes_Securite:
+      version: { ordinateur: 41, modifie: -14h55m, par: adm-bmarchand, note: "Ajout du verrouillage de l'écran à 10 min (au lieu de 15)" }
+  changements:
+    CHG0004701:
+      titre: Maintenance matérielle de HV-LYO-01
+      date: -2h35m
+      auteur: Virtualisation
+      contenu: >
+        Remplacement de la carte mère de HV-LYO-01 par le constructeur,
+        mardi 24/11 de 06 h à 10 h. VM arrêtées : DC-LYO-01. Impact annoncé :
+        aucun, les postes de Lyon basculent sur les contrôleurs de Paris.
+        Validé au comité des changements du 17/11.
+    CHG0004698:
+      titre: GPO_C_Postes_Securite - verrouillage de l'écran à 10 minutes
+      date: -14h55m
+      auteur: bmarchand
+      contenu: Passage du verrouillage de l'écran de 15 à 10 minutes sur tous les postes (Paris, Lyon, Nantes). Appliqué hier à 17 h 40.
+  virtualisation:
+    hotes:
+      HV-LYO-01: { site: Lyon, cluster: null, etat: maintenance, vms: [DC-LYO-01] }
+
+contacts:
+  Virtualisation:
+    - reponse: >
+        HV-LYO-01 est entre les mains du technicien du constructeur. Pas de
+        cluster à Lyon et stockage local : impossible de démarrer DC-LYO-01
+        ailleurs. Fin prévue à 10 h, peut-être un peu avant. On vous prévient
+        dès que la VM redémarre.
+      revele: [pas_de_redemarrage_rapide]
+  Reseau:
+    - reponse: Le lien de Lyon est nominal, aucune alerte. Les postes de Lyon joignent bien Paris, on voit leur trafic.
+      revele: [wan_ok]
+
+dynamiques:
+  retour_dc_lyon:
+    description: Le constructeur termine plus tôt ; DC-LYO-01 redémarre à 09:20.
+    quand: { a: +45m }
+    effets:
+      - definir: { chemin: controleurs.DC-LYO-01.allume, valeur: true }
+      - definir: { chemin: virtualisation.hotes.HV-LYO-01.etat, valeur: en_service }
+      - evenement: { machine: DC-LYO-01, evenement: dns-serveur/4013 }
+      - message: { de: Virtualisation, texte: "HV-LYO-01 réparé. DC-LYO-01 a redémarré à 09:20, vous pouvez vérifier." }
+
+indices:
+  dns_injoignable:
+    description: Les postes de Lyon n'obtiennent aucune réponse DNS (DNS-Client 1014, Resolve-DnsName en délai dépassé), même pour les noms de l'annuaire.
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { evenement: dns_timeout }
+      - { action: machine.dns.resoudre, cible: [PC-LYO-0121, PC-LYO-0133, PC-LYO-0003, PC-LYO-0140, PC-LYO-0160] }
+  dns_unique:
+    description: Les postes de Lyon n'ont qu'un serveur DNS, 10.20.1.10 (DC-LYO-01).
+    categorie: diagnostic
+    points: 5
+    revele_par:
+      - { action: machine.reseau.lire, cible: [PC-LYO-0121, PC-LYO-0133, PC-LYO-0003, PC-LYO-0140, PC-LYO-0160] }
+  dc_lyon_arrete:
+    description: DC-LYO-01 ne répond pas ; la console de virtualisation le montre arrêté depuis 06:02, hôte en maintenance.
+    categorie: diagnostic
+    points: 5
+    revele_par:
+      - { action: virtualisation.vm.lire, cible: DC-LYO-01 }
+      - { action: machine.ping, parametres: { destination: [DC-LYO-01, 10.20.1.10] } }
+  maintenance:
+    description: CHG0004701 arrête DC-LYO-01 de 06 h à 10 h avec un impact annoncé « aucun ».
+    categorie: diagnostic
+    points: 5
+    revele_par:
+      - { action: document.consulter, cible: CHG0004701 }
+  option_dhcp:
+    description: "Option 006 de l'étendue LYO-Postes : 10.20.1.10 seul (Paris et Nantes ont deux serveurs)."
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { action: dhcp.etendue.lire, cible: SRV-DHCP-01 }
+  pas_de_redemarrage_rapide:
+    description: DC-LYO-01 ne peut pas être démarré ailleurs avant la fin de la maintenance.
+    categorie: diagnostic
+    points: 0
+    revele_par:
+      - { contact: Virtualisation }
+  lien_tickets:
+    description: Les cinq tickets de Lyon ont la même cause ; celui de Paris (écran) n'a rien à voir.
+    categorie: correlation
+    points: 8
+    revele_par:
+      - action: ticket.lier
+        parametres:
+          tickets:
+            inclut: [INC0032001, INC0032003, INC0032006, INC0032008, INC0032011]
+            exclut: [INC0032012]
+  incident_majeur:
+    description: Incident majeur déclaré (un site entier, 45 personnes).
+    categorie: correlation
+    points: 4
+    revele_par:
+      - { action: ticket.incident_majeur.declarer }
+  chronologie:
+    description: Premières erreurs DNS à 07:41, à l'arrivée des premiers salariés, après l'arrêt de la VM à 06:02 ; rien avant.
+    categorie: correlation
+    points: 3
+    revele_par:
+      - { evenement: premier_1014 }
+  gpo_hors_cause:
+    description: La modification de GPO_C_Postes_Securite d'hier soir s'applique aussi à Paris et Nantes, qui fonctionnent ; elle ne touche que le verrouillage de l'écran.
+    categorie: elimination
+    points: 3
+    revele_par:
+      - { action: gpo.lire, cible: GPO_C_Postes_Securite }
+      - { action: document.consulter, cible: CHG0004698 }
+  wan_ok:
+    description: "Depuis Lyon, 10.10.1.10 répond au ping : le lien WAN fonctionne, seul le nom ne se résout pas."
+    categorie: elimination
+    points: 3
+    revele_par:
+      - { action: machine.ping, cible: [PC-LYO-0121, PC-LYO-0133, PC-LYO-0003, PC-LYO-0140, PC-LYO-0160], parametres: { destination: [10.10.1.10, 10.10.1.11] } }
+      - { contact: Reseau }
+  antivirus_hors_cause:
+    description: La mise à jour antivirus de 07:02 a touché tout le parc, Paris compris.
+    categorie: elimination
+    points: 2
+    revele_par:
+      - { evenement: maj_antivirus }
+  mdp_isole:
+    description: Le mot de passe de Lucie Clément a bien expiré hier, mais c'est un cas isolé, qui ne bloque pas l'agence ; il se traitera après.
+    categorie: elimination
+    points: 2
+    revele_par:
+      - { action: ad.utilisateur.lire, cible: lclement }
+
+fausses_pistes:
+  gpo_d_hier:
+    description: La GPO de sécurité modifiée hier à 17 h 40.
+    pourquoi_credible: Un changement la veille au soir, un site en panne le lendemain matin.
+    eliminee_par: [gpo_hors_cause]
+    actions_inutiles: []
+    penalite: 0
+  lien_wan:
+    description: Une coupure du lien opérateur de Lyon.
+    pourquoi_credible: « Plus rien ne marche », Internet compris.
+    eliminee_par: [wan_ok]
+    actions_inutiles:
+      - { action: ticket.escalader, parametres: { equipe: Reseau } }
+    penalite: -5
+  antivirus:
+    description: La mise à jour de l'antivirus de 7 h.
+    pourquoi_credible: Elle a eu lieu juste avant les premiers tickets.
+    eliminee_par: [antivirus_hors_cause]
+    actions_inutiles:
+      - { action: machine.antivirus.desactiver }
+    penalite: -10
+  compte_bloque:
+    description: Des comptes verrouillés ou expirés (« je crois que mon compte est bloqué »).
+    pourquoi_credible: Une utilisatrice a vraiment un mot de passe expiré.
+    eliminee_par: [mdp_isole]
+    actions_inutiles:
+      - { action: [ad.utilisateur.deverrouiller, ad.utilisateur.reinitialiser_mdp], cible: lclement, si: [{ chemin: controleurs.DC-LYO-01.allume, egal: false }, { indice: option_dhcp, revele: false }] }
+    penalite: -5
+
+pieges:
+  dns_fixe_sur_les_postes:
+    description: Configurer à la main ou par script des DNS fixes sur les postes de Lyon.
+    declencheur:
+      action: machine.reseau.configurer
+      cible: [PC-LYO-0003, PC-LYO-0121, PC-LYO-0133, PC-LYO-0140, PC-LYO-0160]
+    penalite: -15
+    retour: >
+      Des DNS fixes sur des postes en DHCP créent une configuration qui
+      échappe aux corrections futures. L'option 006 de l'étendue corrige tous
+      les postes à leur prochain renouvellement (redémarrage ou ipconfig
+      /renew).
+  attente_passive:
+    description: Mettre les tickets en attente de la fin de maintenance sans contournement.
+    declencheur:
+      action: ticket.mettre_en_attente
+      cible: [INC0032011, INC0032001, INC0032003]
+      si: [{ chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, options, '6'], ne_contient_pas: 10.10.1.10 }, { chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, options, '6'], ne_contient_pas: 10.10.1.11 }]
+    penalite: -10
+    retour: Les DC de Paris sont joignables ; attendre 10 h laisse 45 personnes et des clients sans solution alors qu'un contournement sûr existe.
+  retour_arriere_gpo:
+    description: Annuler ou délier la GPO modifiée hier.
+    declencheur:
+      action: [gpo.modifier, gpo.lien.modifier, gpo.permissions.modifier]
+      cible: GPO_C_Postes_Securite
+    penalite: -15
+    retour: Modifier en urgence une GPO de tout le parc sur une hypothèse non vérifiée ajoute un changement en pleine crise.
+  redemarrage_dhcp:
+    description: Redémarrer le service DHCP ou le serveur SRV-DHCP-01.
+    declencheur: { action: [machine.service.redemarrer, machine.redemarrer], cible: SRV-DHCP-01 }
+    penalite: -10
+    retour: Les postes de Lyon ont des baux valides ; le serveur DHCP sert les trois sites et n'est pas en cause.
+  ticket_hors_sujet_lie:
+    description: Rattacher le ticket de Paris (écran qui clignote) à l'incident.
+    declencheur: { action: ticket.lier, parametres: { tickets: { inclut: [INC0032012] } } }
+    penalite: -10
+    retour: Un ticket arrivé au même moment n'appartient pas pour autant à l'incident ; le site et le symptôme ne correspondent pas.
+
+actions_dangereuses:
+  retrait_du_dc_de_lyon:
+    description: Retirer DC-LYO-01 de l'annuaire (rétrogradation forcée, nettoyage des métadonnées).
+    declencheur: { action: ad.dc.retirer, cible: DC-LYO-01 }
+    penalite: -60
+    gravite: critique
+    fin_scenario: true
+    retour: Le DC est seulement en maintenance ; le retirer impose une reconstruction et détruit l'objet d'un DC qui redémarrera dans une heure.
+  saisie_fsmo:
+    description: Saisir un rôle FSMO.
+    declencheur: { action: ad.fsmo.saisir }
+    penalite: -40
+    gravite: majeure
+    retour: DC-LYO-01 ne porte aucun rôle FSMO ; une saisie est irréversible et réservée à un DC définitivement perdu.
+  reinitialisation_en_masse:
+    description: Réinitialiser ou déverrouiller en masse les comptes de Lyon.
+    declencheur: { action: ad.utilisateurs.reinitialiser_en_masse }
+    penalite: -50
+    gravite: critique
+    retour: Aucun compte n'est en cause ; l'agence se retrouverait avec 45 mots de passe à changer une fois le service revenu.
+  dc_en_urgence:
+    description: Promouvoir un serveur ou un poste de Lyon en contrôleur de domaine.
+    declencheur: { action: ad.dc.promouvoir }
+    penalite: -40
+    gravite: majeure
+    retour: Une promotion en urgence, sans plan, sur une machine non prévue pour, crée un DC de plus à maintenir et ne règle rien avant des heures.
+  dns_public_en_option:
+    description: Mettre un DNS public (8.8.8.8...) dans l'option 006 de Lyon.
+    declencheur:
+      action: dhcp.option.modifier
+      cible: SRV-DHCP-01
+      parametres: { option: 6, valeur: { contient: 8.8.8.8 } }
+    penalite: -40
+    gravite: majeure
+    retour: Internet reviendrait, mais aucun nom de l'annuaire ne se résoudrait, et les postes garderaient ce DNS jusqu'à leur prochain renouvellement.
+
+resolution:
+  conditions:
+    - { chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, options, '6'], contient_un: [10.10.1.10, 10.10.1.11] }
+    - { chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, options, '6'], ne_contient_pas: 8.8.8.8 }
+    - { chemin: controleurs.DC-LYO-01.existe, egal: true }
+  etapes:
+    contact_virtualisation:
+      description: Équipe virtualisation contactée (délai de retour du DC connu).
+      points: 4
+      valide_par:
+        - { action: equipe.contacter, cible: Virtualisation }
+    option_006:
+      description: Option 006 de LYO-Postes complétée avec les DC de Paris (idéalement 10.20.1.10, 10.10.1.10, 10.10.1.11).
+      points: 10
+      valide_par:
+        - si: [{ chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, options, '6'], contient_un: [10.10.1.10, 10.10.1.11] }]
+    test_un_poste:
+      description: Contournement validé sur un poste (renouvellement ou redémarrage) avant de le généraliser.
+      points: 5
+      valide_par:
+        - action: [machine.reseau.renouveler, machine.redemarrer]
+          cible: [PC-LYO-0003, PC-LYO-0121, PC-LYO-0133, PC-LYO-0140, PC-LYO-0160]
+          si: [{ chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, options, '6'], contient_un: [10.10.1.10, 10.10.1.11] }]
+        - action: ticket.demander_action_utilisateur
+          parametres: { action: [redemarrer_poste, reessayer_connexion] }
+          si: [{ chemin: [dhcp, SRV-DHCP-01, etendues, 10.20.10.0, options, '6'], contient_un: [10.10.1.10, 10.10.1.11] }]
+    retour_du_dc_verifie:
+      description: Après son redémarrage, DC-LYO-01 vérifié (dcdiag, réplication entrante rattrapée ; l'avertissement DNS 4013 au démarrage est normal).
+      points: 6
+      valide_par:
+        - action: [ad.replication.lire, ad.dc.diagnostiquer]
+          si: [{ chemin: controleurs.DC-LYO-01.allume, egal: true }]
+
+communication:
+  cloture:
+    ticket: INC0032011
+    elements:
+      cause:
+        description: Cause (DC-LYO-01 arrêté pour maintenance, seul serveur DNS des postes de Lyon).
+        mots_cles: [DC-LYO-01, maintenance, 10.20.1.10, seul serveur DNS, DNS]
+        points: 4
+      action:
+        description: Contournement (DNS de Paris ajoutés à l'option 006, redémarrage des postes) et retour du DC.
+        mots_cles: [option 006, DNS de Paris, 10.10.1.10, redémarr]
+        points: 3
+      suivi:
+        description: Suites (revue du changement CHG0004701 annoncé sans impact, redondance DNS des sites).
+        mots_cles: [CHG0004701, revue, retour d'expérience, redondance, sans impact]
+        points: 3
+  actions:
+    communication_lyon:
+      description: Message à l'agence de Lyon (cause connue, redémarrer le poste, ne pas insister sur les mots de passe).
+      points: 5
+      valide_par:
+        - { action: ticket.communiquer, parametres: { population: Lyon } }
+
+escalade:
+  equipes: [N3-Infrastructure]
+  delai_cible: 10m
+  indices_attendus:
+    N1: [lien_tickets, dns_unique, dc_lyon_arrete, maintenance]
+    N2: [lien_tickets, dns_unique, dc_lyon_arrete, maintenance, dns_injoignable, option_dhcp, incident_majeur, chronologie]
+  note:
+    elements:
+      perimetre:
+        description: Tout le site de Lyon, nombre de personnes.
+        mots_cles: [Lyon, toute l'agence, 45]
+        points: 6
+      symptome:
+        description: Ouverture de session refusée, aucune résolution de nom.
+        mots_cles: [aucun serveur d'accès, DNS, résolution, 1014]
+        points: 5
+      dc:
+        description: DC-LYO-01 injoignable, en maintenance.
+        mots_cles: [DC-LYO-01, injoignable, arrêté, maintenance, CHG0004701]
+        points: 7
+      cause:
+        description: Un seul serveur DNS distribué aux postes.
+        mots_cles: [10.20.1.10, seul serveur DNS, option 006, un seul DNS]
+        points: 7
+      urgence:
+        description: Urgence et échéance (clients à 9 h, fin de maintenance à 10 h).
+        mots_cles: [9 h, clients, 10 h, urgent, incident majeur]
+        points: 5
+
+debrief:
+  - Une vague de tickets d'un même site, au même moment, se traite comme un seul incident ; on lie les tickets et on écarte ceux qui n'en font pas partie.
+  - « Aucun serveur d'accès » et l'absence de toute résolution de nom désignent le DNS du client avant les comptes.
+  - La redondance des DC ne sert à rien si les postes n'ont qu'un serveur DNS.
+  - Le contournement sûr (option 006) passe par un test sur un poste avant d'être annoncé à tous.
+  - Un DC en maintenance n'est pas un DC perdu : ni saisie de rôle, ni nettoyage de métadonnées.
+  - Un changement annoncé « sans impact » mérite un retour d'expérience.

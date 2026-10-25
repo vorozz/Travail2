@@ -1,0 +1,268 @@
+schema: scenario/1
+id: N1-04
+titre: Service spouleur d'impression planté sur un poste
+niveau: N1
+temps_cible: 10m
+environnement: vellane
+horloge: 2026-11-05T09:30:00+01:00
+competences: [services, journaux_poste, impression]
+
+resume: >
+  David Petit ne peut plus imprimer : le spouleur de son poste s'est arrêté
+  après trois plantages. Un simple redémarrage du service ne tient pas : un
+  travail d'impression corrompu (catalogue de 412 pages) le refait planter.
+  Il faut vider la file locale, et seulement elle.
+cause_racine: >
+  Le travail 00017 (1,8 Go, envoyé à 08:58 vers PAR-3E-COPIEUR) est corrompu.
+  Chaque démarrage du spouleur le relit et plante dans PrintConfig.dll. Après
+  trois échecs, la récupération du service est « Aucune action ».
+
+tickets:
+  INC0031302:
+    ouvert: -18m
+    demandeur: dpetit
+    poste: PC-PAR-0233
+    canal: portail
+    priorite: P3
+    objet: Plus d'imprimante sur mon PC
+    description: |
+      Depuis ce matin, Word me dit « Aucune imprimante n'est installée » et la
+      liste des imprimantes est vide. Mes collègues impriment sur le copieur
+      du 3e sans problème. J'ai besoin d'imprimer le catalogue pour 11 h.
+    reponses:
+      depuis_quand: Vers 9 heures.
+      actions_utilisateur: J'ai lancé l'impression du catalogue 2027, le gros PDF de 412 pages. Il n'est jamais sorti, et après plus rien.
+      collegues: Ana, à côté de moi, imprime sur le même copieur.
+      deja_essaye: J'ai redémarré Word, pas le PC.
+      message_exact: "« Aucune imprimante n'est installée. »"
+      autorisation: Oui, allez-y, je n'ai rien d'autre en cours.
+      par_defaut: Je ne sais pas, je ne touche à rien d'habitude.
+    retours:
+      imprimer:
+        - si:
+            - { chemin: postes.PC-PAR-0233.services.Spooler.etat, egal: en_cours }
+          message: La page est sortie au copieur du 3e. Je relance le catalogue ?
+        - message: Toujours « Aucune imprimante n'est installée ».
+
+monde:
+  postes:
+    PC-PAR-0233:
+      services:
+        Spooler:
+          etat: arrete
+          demarrage: automatique
+          recuperation: { premier_echec: redemarrer, deuxieme_echec: redemarrer, echecs_suivants: aucune, delai: 60s }
+      fichiers:
+        'C:\Windows\System32\spool\PRINTERS\00017.SPL': { taille: 1.8Go, modifie: -32m }
+        'C:\Windows\System32\spool\PRINTERS\00017.SHD': { taille: 12Ko, modifie: -32m }
+        'C:\Windows\System32\spool\drivers': { type: dossier, taille: 412Mo }
+      imprimantes: ['\\SRV-IMP-01\PAR-2E-COPIEUR', '\\SRV-IMP-01\PAR-3E-COPIEUR']
+      journaux:
+        - evenement: app-error/1000
+          ref: crash_1
+          t: -31m
+          donnees: &crash { application: spoolsv.exe, version: 10.0.22621.6199, module: PrintConfig.dll, version_module: 0.3.22621.6199, exception: "0xc0000005", decalage: "0x000000000004a1c2", pid: "0x1f4c", chemin: 'C:\Windows\System32\spoolsv.exe', chemin_module: 'C:\Windows\System32\spool\DRIVERS\x64\3\PrintConfig.dll', rapport: 6b0f2e41-93ad-4c1e-8f27-0d5a9c3e7b12 }
+        - evenement: scm/7031
+          ref: arret_1
+          t: -31m
+          donnees: { service: Spouleur d’impression, n: 1, delai: 60000, action: Redémarrer le service }
+        - evenement: app-error/1000
+          t: -30m
+          donnees: *crash
+        - evenement: scm/7031
+          t: -30m
+          donnees: { service: Spouleur d’impression, n: 2, delai: 60000, action: Redémarrer le service }
+        - evenement: app-error/1000
+          t: -29m
+          donnees: *crash
+        - evenement: scm/7034
+          ref: arret_definitif
+          t: -29m
+          donnees: { service: Spouleur d’impression, n: 3 }
+        - evenement: dcom/10016
+          t: -2h
+          donnees: { clsid: "{2593F8B9-4EAF-457C-B68A-50F6B8EA6B54}", appid: "{15C20B67-12E7-4BB6-92BB-7AFF07997402}", sid: S-1-5-21-3021597742-1873450312-2264317895-3233, compte: VELLANE\dpetit }
+  serveurs:
+    SRV-IMP-01:
+      files_impression:
+        PAR-3E-COPIEUR:
+          travaux: { nombre: 14, proprietaires: [agarcia, pgarnier, cblanc, nrichard, cmartin] }
+
+dynamiques:
+  replantage:
+    description: Le spouleur relit le travail corrompu à chaque démarrage et plante au bout de 20 secondes.
+    quand:
+      apres_action: { action: [machine.service.demarrer, machine.service.redemarrer], cible: PC-PAR-0233, parametres: { service: Spooler } }
+      delai: 20s
+    si:
+      - { chemin: ['postes', 'PC-PAR-0233', 'fichiers', 'C:\Windows\System32\spool\PRINTERS\00017.SPL', 'existe'], egal: true }
+    effets:
+      - definir: { chemin: postes.PC-PAR-0233.services.Spooler.etat, valeur: arrete }
+      - evenement: { machine: PC-PAR-0233, evenement: app-error/1000, donnees: *crash }
+      - evenement: { machine: PC-PAR-0233, evenement: scm/7034, donnees: { service: Spouleur d’impression, n: 4 } }
+
+indices:
+  spouleur_arrete:
+    description: Le service Spouleur d'impression est arrêté (démarrage automatique).
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: machine.services.lire, cible: PC-PAR-0233 }
+  plantages:
+    description: Trois arrêts inattendus du spouleur entre 08:59 et 09:01 (7031, 7031, 7034), puis plus de redémarrage automatique.
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { evenement: arret_definitif }
+      - { evenement: arret_1 }
+  module_crash:
+    description: spoolsv.exe plante dans PrintConfig.dll (code 0xc0000005) au traitement d'un travail.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { evenement: crash_1 }
+  travail_corrompu:
+    description: Un travail de 1,8 Go (00017.SPL) daté de 08:58 reste dans C:\Windows\System32\spool\PRINTERS.
+    categorie: diagnostic
+    points: 10
+    revele_par:
+      - { action: machine.fichiers.lister, cible: PC-PAR-0233, parametres: { chemin: 'C:\Windows\System32\spool\PRINTERS' } }
+  impression_lourde:
+    description: Le problème a commencé avec l'impression d'un PDF de 412 pages.
+    categorie: diagnostic
+    points: 0
+    revele_par:
+      - { question: actions_utilisateur, ticket: INC0031302 }
+  copieur_ok:
+    description: Le copieur et le serveur d'impression fonctionnent (les collègues impriment).
+    categorie: diagnostic
+    points: 0
+    revele_par:
+      - { question: collegues, ticket: INC0031302 }
+      - { action: imprimante.file.lire, cible: 'SRV-IMP-01\PAR-3E-COPIEUR' }
+
+fausses_pistes:
+  pilote_corrompu:
+    description: PrintConfig.dll fait partie du pilote d'impression ; on peut croire le pilote corrompu.
+    pourquoi_credible: Le module défaillant nommé dans l'événement 1000 est une DLL du pilote.
+    eliminee_par: [travail_corrompu]
+    actions_inutiles:
+      - { action: imprimante.pilote.supprimer, cible: PC-PAR-0233 }
+    penalite: -5
+
+pieges:
+  redemarrage_insistant:
+    description: Redémarrer une deuxième fois le spouleur sans avoir vidé la file locale.
+    declencheur:
+      action: [machine.service.demarrer, machine.service.redemarrer]
+      cible: PC-PAR-0233
+      parametres: { service: Spooler }
+      occurrence: 2
+      si:
+        - { chemin: ['postes', 'PC-PAR-0233', 'fichiers', 'C:\Windows\System32\spool\PRINTERS\00017.SPL', 'existe'], egal: true }
+    penalite: -5
+    retour: >
+      Un service qui replante aussitôt redémarré ne se répare pas en
+      insistant. Les journaux (trois plantages au traitement d'un travail) et
+      le contenu du dossier PRINTERS donnent la cause.
+  cloture_prematuree:
+    description: Clôturer alors que le spouleur est arrêté ou que le travail corrompu est toujours là.
+    declencheur:
+      action: ticket.cloturer
+      cible: INC0031302
+      si: [{ chemin: postes.PC-PAR-0233.services.Spooler.etat, different: en_cours }]
+    penalite: -10
+    retour: Le service doit tourner de façon stable et une page de test doit sortir avant la clôture.
+
+actions_dangereuses:
+  vider_file_du_serveur:
+    description: Annuler tous les documents de la file PAR-3E-COPIEUR sur SRV-IMP-01.
+    declencheur:
+      action: imprimante.file.vider
+      cible: 'SRV-IMP-01\PAR-3E-COPIEUR'
+    penalite: -20
+    gravite: majeure
+    effets:
+      - definir: { chemin: serveurs.SRV-IMP-01.files_impression.PAR-3E-COPIEUR.travaux.nombre, valeur: 0 }
+      - ticket:
+          id: INC0031311
+          ouvert: +4m
+          demandeur: agarcia
+          poste: PC-PAR-0234
+          canal: telephone
+          priorite: P3
+          objet: Mon impression a disparu
+          description: J'avais lancé 60 pages au copieur du 3e, elles ont disparu de la file. Et Pierre dit que les siennes aussi.
+    retour: >
+      La file du serveur est partagée par tout l'étage : l'annuler supprime
+      les impressions de 14 personnes. Le travail corrompu n'est même pas
+      dans cette file, il est resté sur le poste.
+  suppression_du_dossier_spool:
+    description: Supprimer tout C:\Windows\System32\spool (ou spool\drivers) au lieu du seul contenu de PRINTERS.
+    declencheur:
+      action: machine.fichiers.supprimer
+      cible: PC-PAR-0233
+      parametres: { chemin: ['C:\Windows\System32\spool', 'C:\Windows\System32\spool\drivers'] }
+    penalite: -25
+    gravite: majeure
+    effets:
+      - definir: { chemin: ['postes', 'PC-PAR-0233', 'fichiers', 'C:\Windows\System32\spool\drivers', 'existe'], valeur: false }
+      - definir: { chemin: postes.PC-PAR-0233.imprimantes, valeur: [] }
+    retour: >
+      Le dossier spool contient aussi les pilotes de toutes les imprimantes du
+      poste. Les supprimer casse toute l'impression et impose une
+      réinstallation. Seul le contenu de spool\PRINTERS se supprime.
+
+resolution:
+  conditions:
+    - { chemin: postes.PC-PAR-0233.services.Spooler.etat, egal: en_cours }
+    - { chemin: ['postes', 'PC-PAR-0233', 'fichiers', 'C:\Windows\System32\spool\PRINTERS\00017.SPL', 'existe'], egal: false }
+  etapes:
+    suppression_travail:
+      description: Travail corrompu supprimé de C:\Windows\System32\spool\PRINTERS (service arrêté).
+      points: 15
+      valide_par:
+        - si: [{ chemin: ['postes', 'PC-PAR-0233', 'fichiers', 'C:\Windows\System32\spool\PRINTERS\00017.SPL', 'existe'], egal: false }]
+    service_stable:
+      description: Spouleur redémarré et stable.
+      points: 15
+      valide_par:
+        - si:
+            - { chemin: postes.PC-PAR-0233.services.Spooler.etat, egal: en_cours }
+            - { chemin: ['postes', 'PC-PAR-0233', 'fichiers', 'C:\Windows\System32\spool\PRINTERS\00017.SPL', 'existe'], egal: false }
+    test_impression:
+      description: Page de test ou impression réussie avec l'utilisateur.
+      points: 10
+      valide_par:
+        - { action: imprimante.page_test, cible: PC-PAR-0233, si: [{ chemin: postes.PC-PAR-0233.services.Spooler.etat, egal: en_cours }] }
+        - action: ticket.demander_action_utilisateur
+          cible: INC0031302
+          parametres: { action: imprimer }
+          si: [{ chemin: postes.PC-PAR-0233.services.Spooler.etat, egal: en_cours }]
+
+communication:
+  cloture:
+    ticket: INC0031302
+    elements:
+      cause:
+        description: Cause expliquée (travail d'impression corrompu qui faisait planter le spouleur).
+        mots_cles: [corromp, travail d'impression, document bloqué, file d'attente, catalogue]
+        points: 5
+      action:
+        description: Action réalisée (file locale vidée, service redémarré).
+        mots_cles: [PRINTERS, vid, supprim, redémarr]
+        points: 5
+      consigne:
+        description: Consigne à l'utilisateur (relancer le catalogue, en plusieurs parties ou en PDF plus léger).
+        mots_cles: [relancer, réimprimer, imprimer à nouveau, plusieurs fois, par parties]
+        points: 5
+
+escalade:
+  equipes: []
+
+debrief:
+  - Un service arrêté se lit d'abord dans les journaux du poste (7031, 7034, 1000) avant d'être redémarré.
+  - Un spouleur qui replante au démarrage relit un travail corrompu ; vider spool\PRINTERS, service arrêté.
+  - Le module défaillant n'est pas toujours le coupable ; ici le pilote est sain.
+  - La file du serveur d'impression est partagée : ne jamais l'annuler pour un problème d'un poste.
+  - Le document perdu doit être relancé par l'utilisateur ; le lui dire.

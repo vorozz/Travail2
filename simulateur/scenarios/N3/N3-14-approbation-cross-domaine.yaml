@@ -1,0 +1,407 @@
+schema: scenario/1
+id: N3-14
+titre: Accès cross-domaine cassé, relation d'approbation entre Vellane et Orbis
+niveau: N3
+temps_cible: 45m
+environnement: vellane
+horloge: 2026-11-25T09:10:00+01:00
+competences: [approbations, netlogon, kerberos_inter_royaumes, coordination_externe, dns_conditionnel]
+
+resume: >
+  Depuis ce matin, les utilisateurs de Vellane n'accèdent plus aux ressources
+  d'Orbis, et ceux d'Orbis plus à l'intranet de Vellane. Le DNS vers Orbis
+  est lent mais fonctionne, les ports sont ouverts. L'approbation ne se
+  valide plus : hier soir, pendant le décommissionnement d'ORB-DC01, un
+  administrateur d'Orbis a réinitialisé le secret de l'approbation de son
+  côté seulement. Le côté Vellane n'a pas bougé. La correction est une
+  réinitialisation coordonnée des deux côtés, pas une suppression.
+cause_racine: >
+  Après la saisie du rôle PDC sur ORB-DC03 (23:05), l'administrateur d'Orbis
+  a lancé « netdom trust /resetOneSide » côté Orbis (23:10) avec un nouveau
+  mot de passe. Les secrets ne correspondent plus : Kerberos inter-royaumes
+  et canal sécurisé Netlogon entre les deux forêts sont refusés dans les deux
+  sens.
+
+tickets:
+  INC0032101:
+    ouvert: -29m
+    demandeur: pdurand
+    poste: PC-PAR-0301
+    canal: portail
+    priorite: P2
+    objet: Plus d'accès au partage Échanges d'Orbis
+    description: |
+      Depuis ce matin, \\SRV-ORB-FIC01.orbis.local\Echanges me demande un
+      identifiant puis refuse l'accès. J'ai changé mon mot de passe hier,
+      c'est peut-être lié ?
+    reponses:
+      depuis_quand: Hier soir vers 18 h ça marchait, ce matin plus du tout.
+      collegues: Inès et Simon, qui travaillent aussi avec Orbis, ont le même problème.
+      changement_recent: J'ai changé mon mot de passe hier midi.
+      message_exact: « Vous n'avez pas l'autorisation d'accéder à \\SRV-ORB-FIC01.orbis.local\Echanges », puis une fenêtre d'identifiants qui refuse mon mot de passe.
+      par_defaut: Je ne sais pas.
+    retours:
+      ouvrir_lecteur:
+        - si:
+            - { chemin: approbations.vellane.local.orbis.local.secret.version, egal_chemin: approbations.orbis.local.vellane.local.secret.version }
+            - { chemin: postes.PC-PAR-0301.kerberos.tickets_purges, egal: true }
+          message: Le partage Échanges s'ouvre !
+        - si:
+            - { chemin: approbations.vellane.local.orbis.local.secret.version, egal_chemin: approbations.orbis.local.vellane.local.secret.version }
+          message: Toujours une fenêtre d'identifiants... ah, après déconnexion et reconnexion, ça s'ouvre.
+          effets:
+            - definir: { chemin: postes.PC-PAR-0301.kerberos.tickets_purges, valeur: true }
+        - message: Toujours refusé.
+  INC0032104:
+    ouvert: -18m
+    demandeur: ivincent
+    poste: PC-PAR-0302
+    canal: portail
+    priorite: P2
+    objet: Application de consolidation Orbis inaccessible
+    description: |
+      https://conso.orbis.local me demande un identifiant et refuse le mien.
+      La consolidation mensuelle doit partir jeudi.
+    reponses:
+      depuis_quand: Ce matin.
+      par_defaut: Je ne sais pas.
+  INC0032107:
+    ouvert: -9m
+    demandeur: smasson
+    poste: PC-PAR-0303
+    canal: portail
+    priorite: P3
+    objet: Partage Échanges Orbis
+    description: Je n'arrive plus à ouvrir le partage Échanges d'Orbis.
+    reponses:
+      par_defaut: Pareil que Paul, je pense.
+  INC0032109:
+    ouvert: -6m
+    demandeur: Orbis-IT
+    canal: courriel
+    priorite: P2
+    objet: "Orbis : accès à l'intranet Vellane impossible"
+    description: |
+      Bonjour, depuis ce matin nos utilisateurs n'accèdent plus à votre
+      intranet (intranet.vellane.local) : demande d'identifiants en boucle.
+      Pour information, nous avons décommissionné hier soir notre ancien
+      contrôleur ORB-DC01 ; l'opération s'est bien passée.
+      Le support informatique d'Orbis.
+
+monde:
+  approbations:
+    orbis.local:
+      vellane.local:
+        secret: { version: 42, dernier_changement: -10h }
+  domaines:
+    orbis.local:
+      controleurs: [ORB-DC03]
+      fsmo: { pdc: ORB-DC03 }
+  controleurs:
+    ORB-DC01: { allume: false, decommissionne: true }
+    DC-PAR-01:
+      journaux:
+        - evenement: netlogon/5805
+          ref: setup_orb_dc03
+          t: -9h58m
+          repeter: { intervalle: 15m, jusqu_a: -2m }
+          donnees: { ordinateur: ORB-DC03, raison: Accès refusé. }
+        - evenement: netlogon/5719
+          ref: canal_orbis
+          t: -9h56m
+          repeter: { intervalle: 15m, jusqu_a: -3m }
+          donnees: { domaine: ORBIS, raison: Accès refusé. }
+    DC-PAR-02:
+      journaux:
+        - evenement: netlogon/5805
+          t: -9h50m
+          repeter: { intervalle: 20m, jusqu_a: -5m }
+          donnees: { ordinateur: ORB-DC03, raison: Accès refusé. }
+  postes:
+    PC-PAR-0301:
+      kerberos: { tickets_purges: false }
+      journaux:
+        - evenement: lsasrv/40961
+          ref: client_orbis
+          t: -40m
+          repeter: { intervalle: 10m, jusqu_a: -2m }
+          donnees: { serveur: cifs/SRV-ORB-FIC01.orbis.local }
+    PC-PAR-0302:
+      kerberos: { tickets_purges: false }
+    PC-PAR-0303:
+      kerberos: { tickets_purges: false }
+  documents:
+    KB-0318:
+      titre: Approbation de forêt avec Orbis
+      niveau: N3
+      contenu: >
+        Approbation de forêt bidirectionnelle, transitive, filtrage SID actif,
+        authentification à l'échelle de la forêt. Le secret change tous les
+        30 jours, à l'initiative des PDC. Interlocuteur : support informatique
+        d'Orbis. En cas d'échec de validation, réinitialiser le secret des deux
+        côtés avec un mot de passe convenu, jamais supprimer et recréer
+        l'approbation (paramètres de sécurité, ACL inter-forêts).
+
+contacts:
+  Orbis-IT:
+    - si: [{ indice: verification_echoue }]
+      reponse: >
+        Ah... Hier soir, la rétrogradation d'ORB-DC01 a échoué, on l'a arrêté
+        et on a saisi le rôle PDC sur ORB-DC03 vers 23 h 05. Ensuite la
+        validation de l'approbation échouait dans notre console, alors j'ai
+        lancé « netdom trust /resetOneSide » de notre côté vers 23 h 10, avec
+        un nouveau mot de passe. Je n'ai rien fait chez vous. On convient d'un
+        mot de passe temporaire et on réinitialise les deux côtés maintenant ?
+      revele: [reset_un_cote, serveur_orbis_ok]
+      effets:
+        - definir: { chemin: approbations.vellane.local.orbis.local.coordination, valeur: true }
+    - reponse: >
+        Chez nous tout fonctionne : nos utilisateurs accèdent à nos serveurs,
+        Échanges compris, et la migration s'est bien passée. Le problème doit
+        venir de chez vous. Vous avez fait des modifications ?
+      revele: [serveur_orbis_ok]
+
+indices:
+  verification_echoue:
+    description: "netdom trust /verify et nltest /sc_verify:orbis.local échouent : ERROR_ACCESS_DENIED, l'approbation ne se valide pas."
+    categorie: diagnostic
+    points: 7
+    revele_par:
+      - { action: ad.approbation.verifier, cible: orbis.local }
+  netlogon_orbis:
+    description: NETLOGON 5719 (domaine ORBIS, accès refusé) et 5805 (ORB-DC03, accès refusé) sur les DC de Paris depuis 23:12.
+    categorie: diagnostic
+    points: 5
+    revele_par:
+      - { evenement: canal_orbis }
+      - { evenement: setup_orb_dc03 }
+  tdo_inchange:
+    description: Côté Vellane, l'objet de l'approbation n'a pas changé depuis la rotation normale d'il y a 12 jours ; la modification vient de l'autre côté.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { action: ad.approbation.lire, cible: vellane.local }
+  reset_un_cote:
+    description: Orbis a réinitialisé le secret de son côté seulement, hier à 23:10, après une saisie de rôle PDC.
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { contact: Orbis-IT, si: [{ indice: verification_echoue }] }
+  heure_coincide:
+    description: Les erreurs commencent à 23:12, pendant l'intervention d'Orbis sur ses contrôleurs.
+    categorie: diagnostic
+    points: 3
+    revele_par:
+      - { evenement: setup_orb_dc03 }
+  lien_tickets:
+    description: Les quatre tickets (trois de Vellane, un d'Orbis) relèvent de la même approbation.
+    categorie: correlation
+    points: 7
+    revele_par:
+      - { action: ticket.lier, parametres: { tickets: { inclut: [INC0032101, INC0032104, INC0032107, INC0032109] } } }
+  deux_sens:
+    description: La panne touche les deux sens (Vellane vers Orbis et Orbis vers Vellane) ; ni une ressource ni un compte, mais l'approbation.
+    categorie: correlation
+    points: 4
+    revele_par:
+      - { action: ticket.lire, cible: INC0032109 }
+  source_orb_dc03:
+    description: Les échecs 5805 viennent d'ORB-DC03, le nouveau PDC d'Orbis issu de la migration annoncée dans le courriel.
+    categorie: correlation
+    points: 4
+    revele_par:
+      - { evenement: setup_orb_dc03 }
+  dns_orbis_ok:
+    description: srv-orb-fic01.orbis.local se résout (en 3 secondes à cause de l'ancien redirecteur 172.16.0.10 éteint, mais il se résout).
+    categorie: elimination
+    points: 3
+    revele_par:
+      - { action: machine.dns.resoudre, parametres: { nom: [SRV-ORB-FIC01.orbis.local, orbis.local, conso.orbis.local] } }
+      - { action: dns.redirecteurs.lire }
+  ports_ok:
+    description: Les ports 88, 389 et 445 d'ORB-DC03 et de SRV-ORB-FIC01 répondent ; aucun filtrage réseau.
+    categorie: elimination
+    points: 3
+    revele_par:
+      - { action: machine.test_port, parametres: { destination: [172.16.0.13, ORB-DC03.orbis.local, 172.16.2.20, SRV-ORB-FIC01.orbis.local] } }
+  pas_lie_au_compte:
+    description: Plusieurs utilisateurs touchés, dont deux qui n'ont pas changé de mot de passe ; le changement de Paul Durand n'y est pour rien.
+    categorie: elimination
+    points: 2
+    revele_par:
+      - { question: collegues, ticket: INC0032101 }
+  serveur_orbis_ok:
+    description: Le partage Échanges fonctionne pour les utilisateurs d'Orbis.
+    categorie: elimination
+    points: 2
+    revele_par:
+      - { contact: Orbis-IT }
+
+fausses_pistes:
+  redirecteur_dns:
+    description: Le redirecteur conditionnel orbis.local liste encore 172.16.0.10 (ORB-DC01, éteint) en premier ; les résolutions sont lentes.
+    pourquoi_credible: L'ancien DC vient d'être décommissionné et la lenteur se voit.
+    eliminee_par: [dns_orbis_ok]
+    actions_inutiles: []
+    penalite: 0
+  mot_de_passe_utilisateur:
+    description: Le changement de mot de passe de Paul Durand hier.
+    pourquoi_credible: Il le suggère lui-même.
+    eliminee_par: [pas_lie_au_compte]
+    actions_inutiles:
+      - { action: [ad.utilisateur.reinitialiser_mdp, ad.utilisateur.deverrouiller], cible: pdurand }
+    penalite: -10
+  pare_feu:
+    description: Un filtrage réseau entre les deux forêts.
+    pourquoi_credible: Les accès inter-forêts passent par un pare-feu.
+    eliminee_par: [ports_ok]
+    actions_inutiles:
+      - { action: equipe.contacter, cible: Reseau, si: [{ indice: ports_ok, revele: false }] }
+    penalite: -5
+
+pieges:
+  reinitialisation_d_un_seul_cote:
+    description: Réinitialiser le secret côté Vellane seulement, sans mot de passe convenu avec Orbis.
+    declencheur:
+      action: ad.approbation.reinitialiser_mdp
+      cible: orbis.local
+      si: [{ chemin: approbations.vellane.local.orbis.local.coordination, different: true }]
+    penalite: -20
+    retour: >
+      Chaque côté a maintenant un secret différent, choisi seul : la panne
+      continue et Orbis devra recommencer. Un secret d'approbation se
+      réinitialise des deux côtés avec la même valeur, en coordination.
+  reinitialisation_utilisateur:
+    description: Réinitialiser le mot de passe de Paul Durand.
+    declencheur: { action: ad.utilisateur.reinitialiser_mdp, cible: pdurand }
+    penalite: -10
+    retour: Trois utilisateurs et les utilisateurs d'Orbis sont touchés ; un mot de passe individuel ne peut pas être la cause.
+  cloture_sans_test:
+    description: Clôturer sans avoir fait tester un accès après la réinitialisation.
+    declencheur:
+      action: ticket.cloturer
+      si: [{ chemin: postes.PC-PAR-0301.kerberos.tickets_purges, egal: false }]
+    penalite: -10
+    retour: Les tickets Kerberos d'avant la correction restent en cache ; sans purge ou reconnexion, l'utilisateur n'accède toujours à rien.
+
+actions_dangereuses:
+  suppression_approbation:
+    description: Supprimer l'approbation pour la recréer.
+    declencheur: { action: [ad.approbation.supprimer, ad.approbation.creer], cible: orbis.local }
+    penalite: -50
+    gravite: critique
+    retour: >
+      Supprimer l'approbation coupe tous les accès entre les deux forêts, et
+      la recréer en urgence risque d'en changer le type ou les protections
+      (filtrage SID, authentification sélective). Le secret se réinitialise ;
+      l'approbation ne se recrée pas.
+  filtrage_sid:
+    description: Désactiver le filtrage SID (quarantaine) ou activer l'historique SID sur l'approbation.
+    declencheur: { action: ad.approbation.filtrage_sid.modifier, cible: orbis.local }
+    penalite: -50
+    gravite: critique
+    retour: Le filtrage SID empêche un administrateur d'Orbis de s'octroyer des droits chez Vellane par l'historique SID ; le désactiver n'a aucun rapport avec la panne.
+  authentification_selective:
+    description: Activer l'authentification sélective sans l'avoir préparée.
+    declencheur: { action: ad.approbation.authentification_selective.modifier, cible: orbis.local, parametres: { active: true } }
+    penalite: -40
+    gravite: majeure
+    retour: Sans les autorisations « Autorisé à s'authentifier » sur chaque serveur, l'authentification sélective coupe tous les accès d'Orbis, y compris ceux qui fonctionneraient une fois l'approbation réparée.
+
+resolution:
+  conditions:
+    - { chemin: approbations.vellane.local.orbis.local.secret.version, egal_chemin: approbations.orbis.local.vellane.local.secret.version }
+    - { chemin: approbations.vellane.local.orbis.local.filtrage_sid, egal: true }
+    - { chemin: approbations.vellane.local.orbis.local.type, egal: foret }
+  etapes:
+    coordination:
+      description: Orbis contacté avec le constat (validation en échec), mot de passe temporaire convenu.
+      points: 5
+      valide_par:
+        - si: [{ chemin: approbations.vellane.local.orbis.local.coordination, egal: true }]
+    reinitialisation_coordonnee:
+      description: Secret réinitialisé des deux côtés avec la même valeur.
+      points: 12
+      valide_par:
+        - si: [{ chemin: approbations.vellane.local.orbis.local.secret.version, egal_chemin: approbations.orbis.local.vellane.local.secret.version }]
+    verification:
+      description: Approbation validée après la réinitialisation (netdom /verify, nltest /sc_verify).
+      points: 4
+      valide_par:
+        - action: ad.approbation.verifier
+          cible: orbis.local
+          si: [{ chemin: approbations.vellane.local.orbis.local.secret.version, egal_chemin: approbations.orbis.local.vellane.local.secret.version }]
+    test_utilisateur:
+      description: Accès testé avec un utilisateur après purge des tickets Kerberos ou reconnexion.
+      points: 4
+      valide_par:
+        - action: ticket.demander_action_utilisateur
+          cible: [INC0032101, INC0032104, INC0032107]
+          parametres: { action: [ouvrir_lecteur, ouvrir_url] }
+          si: [{ chemin: approbations.vellane.local.orbis.local.secret.version, egal_chemin: approbations.orbis.local.vellane.local.secret.version }]
+
+communication:
+  cloture:
+    ticket: INC0032101
+    elements:
+      cause:
+        description: Cause (secret de l'approbation réinitialisé d'un seul côté par Orbis).
+        mots_cles: [approbation, secret, mot de passe de l'approbation, resetOneSide, un seul côté]
+        points: 4
+      action:
+        description: Action (réinitialisation coordonnée des deux côtés, validation).
+        mots_cles: [deux côtés, coordonn, réinitialis, netdom, valid]
+        points: 3
+      suivi:
+        description: Suites (rappel de la procédure à Orbis, nettoyage du redirecteur 172.16.0.10).
+        mots_cles: [procédure, KB-0318, redirecteur, 172.16.0.10, retour d'expérience]
+        points: 3
+  actions:
+    informer_orbis:
+      description: Orbis informé du rétablissement (ses utilisateurs doivent se reconnecter).
+      points: 3
+      valide_par:
+        - action: equipe.contacter
+          cible: Orbis-IT
+          si: [{ chemin: approbations.vellane.local.orbis.local.secret.version, egal_chemin: approbations.orbis.local.vellane.local.secret.version }]
+    informer_projet:
+      description: Message aux utilisateurs du projet Orbis (fermer la session ou klist purge).
+      points: 2
+      valide_par:
+        - { action: ticket.communiquer, parametres: { population: GG_Projet_Orbis } }
+
+escalade:
+  equipes: [N3-Infrastructure]
+  delai_cible: 15m
+  indices_attendus:
+    N1: [lien_tickets, deux_sens, pas_lie_au_compte]
+    N2: [lien_tickets, deux_sens, pas_lie_au_compte, verification_echoue, netlogon_orbis, tdo_inchange, dns_orbis_ok, ports_ok, source_orb_dc03]
+  note:
+    elements:
+      perimetre:
+        description: Utilisateurs du projet Orbis et utilisateurs d'Orbis touchés.
+        mots_cles: [Orbis, plusieurs, projet, quatre tickets, 4 tickets]
+        points: 6
+      deux_sens:
+        description: La panne est dans les deux sens.
+        mots_cles: [deux sens, utilisateurs d'Orbis, intranet]
+        points: 6
+      approbation:
+        description: Validation de l'approbation en échec.
+        mots_cles: [approbation, trust, netdom, nltest, accès refusé, 5719]
+        points: 8
+      contexte:
+        description: Intervention d'Orbis hier soir sur ses DC.
+        mots_cles: [ORB-DC01, ORB-DC03, décommission, migration, hier soir]
+        points: 6
+      elimination:
+        description: DNS et ports vérifiés, mot de passe individuel hors de cause.
+        mots_cles: [DNS, ports, pare-feu, pas le mot de passe]
+        points: 4
+
+debrief:
+  - Une panne dans les deux sens entre deux forêts désigne l'approbation, pas une ressource.
+  - netdom /verify et nltest /sc_verify:<domaine> testent l'approbation sans rien modifier.
+  - Quand rien n'a changé chez soi, la cause est souvent chez le voisin ; un contact précis, avec le constat, obtient la bonne réponse.
+  - Un secret d'approbation se réinitialise des deux côtés, avec la même valeur, en coordination ; on ne supprime pas l'approbation.
+  - Le filtrage SID et l'authentification sélective sont des protections, pas des leviers de dépannage.

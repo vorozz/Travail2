@@ -1,0 +1,350 @@
+schema: scenario/1
+id: N2-09
+titre: Accès lent ou impossible à un partage, enregistrement DNS obsolète
+niveau: N2
+temps_cible: 25m
+environnement: vellane
+horloge: 2026-11-17T10:40:00+01:00
+competences: [dns, enregistrements_statiques, cache_dns, smb, migration]
+
+resume: >
+  Depuis la migration de SRV-FIC-02 vers le nouveau réseau des serveurs
+  samedi, le lecteur Q: du bureau d'études est tantôt lent, tantôt
+  inaccessible, et pas chez tout le monde. La zone DNS contient encore un
+  enregistrement A statique vers l'ancienne adresse 10.10.2.21, à côté de
+  l'enregistrement dynamique vers 10.10.8.21 : selon la réponse reçue et le
+  cache de chaque poste, la connexion part vers une adresse morte.
+cause_racine: >
+  Enregistrement A statique « SRV-FIC-02 10.10.2.21 » créé à la main en 2019,
+  jamais supprimé lors de la migration (CHG0004588). Le serveur s'est inscrit
+  dynamiquement avec 10.10.8.21 ; les deux réponses tournent (round robin).
+  Le PTR 21.2.10.10.in-addr.arpa est lui aussi obsolète.
+
+tickets:
+  INC0031733:
+    ouvert: -1h05m
+    demandeur: mgirard
+    poste: PC-PAR-0261
+    canal: portail
+    priorite: P3
+    objet: "Lecteur Q: inaccessible (croix rouge)"
+    description: |
+      Depuis ce matin, le lecteur Q: (Projets) a une croix rouge. Quand je
+      clique dessus, ça tourne 30 secondes puis « Le chemin d'accès réseau est
+      introuvable ». Une fois sur deux à peu près. Hier soir ça marchait.
+    reponses:
+      depuis_quand: Ce matin. Hier lundi c'était lent par moments, mais ça finissait par s'ouvrir.
+      collegues: Alice a le même souci. Romain, à côté, n'a aucun problème.
+      deja_essaye: J'ai redémarré, ça a marché une heure puis c'est revenu.
+      message_exact: "« \\\\SRV-FIC-02\\Projets n'est pas accessible. Le chemin d'accès réseau est introuvable. »"
+      changement_recent: Rien de mon côté.
+      par_defaut: Je ne sais pas.
+    retours:
+      ouvrir_lecteur:
+        - si:
+            - { chemin: postes.PC-PAR-0261.dns.cache.SRV-FIC-02, ne_contient_pas: 10.10.2.21 }
+            - { chemin: dns.zones.vellane.local.enregistrements.SRV-FIC-02, ne_contient_pas: { donnees: 10.10.2.21 } }
+          message: "Q: s'ouvre tout de suite, et la croix rouge a disparu."
+        - message: Ça tourne, puis « Le chemin d'accès réseau est introuvable ».
+  INC0031740:
+    ouvert: -40m
+    demandeur: afontaine
+    poste: PC-PAR-0262
+    canal: portail
+    priorite: P3
+    objet: "Q: très lent"
+    description: |
+      Le lecteur Q: met parfois une demi-minute à s'ouvrir, et l'enregistrement
+      de mes plans échoue de temps en temps.
+    reponses:
+      depuis_quand: Depuis hier matin.
+      collegues: Marc aussi a des soucis avec Q:.
+      par_defaut: Je ne sais pas.
+
+monde:
+  dns:
+    zones:
+      vellane.local:
+        enregistrements:
+          SRV-FIC-02:
+            - { type: A, donnees: 10.10.2.21, statique: true, cree: 2019-03-12 }
+            - { type: A, donnees: 10.10.8.21, statique: false, horodatage: -14h }
+      10.10.in-addr.arpa:
+        enregistrements:
+          '21.2': [{ type: PTR, donnees: SRV-FIC-02.vellane.local, statique: true, cree: 2019-03-12 }]
+          '21.8': [{ type: PTR, donnees: SRV-FIC-02.vellane.local, statique: false, horodatage: -14h }]
+  serveurs:
+    SRV-FIC-02:
+      reseau: { ip: 10.10.8.21/24, passerelle: 10.10.8.1, dns: [10.10.1.10, 10.10.1.11] }
+      journaux:
+        - evenement: windowsupdate/19
+          t: -2j20h
+          donnees: { mise_a_jour: "2026-11 Mise à jour cumulative pour Microsoft Server Operating System version 21H2 pour les systèmes x64 (KB5068851)" }
+  postes:
+    PC-PAR-0261:
+      dns:
+        cache:
+          SRV-FIC-02: [10.10.2.21, 10.10.8.21]
+      journaux:
+        - evenement: smbclient/30803
+          ref: smb_ancienne_ip
+          t: -1h12m
+          repeter: { intervalle: 7m, jusqu_a: -2m }
+          donnees: { erreur: "{Délai d’attente du périphérique dépassé} L’opération d’E/S spécifiée n’a pas été effectuée avant l’expiration du délai.", serveur: SRV-FIC-02, adresse: "10.10.2.21:445" }
+    PC-PAR-0262:
+      dns:
+        cache:
+          SRV-FIC-02: [10.10.2.21, 10.10.8.21]
+      journaux:
+        - evenement: smbclient/30803
+          t: -55m
+          repeter: { intervalle: 11m, jusqu_a: -5m }
+          donnees: { erreur: "{Délai d’attente du périphérique dépassé} L’opération d’E/S spécifiée n’a pas été effectuée avant l’expiration du délai.", serveur: SRV-FIC-02, adresse: "10.10.2.21:445" }
+    PC-PAR-0270:
+      dns:
+        cache:
+          SRV-FIC-02: [10.10.8.21, 10.10.2.21]
+  changements:
+    CHG0004588:
+      titre: Migration de SRV-FIC-02 vers le réseau des serveurs 10.10.8.0/24
+      date: -3j
+      auteur: bmarchand
+      contenu: >
+        Samedi 14/11 de 8 h à 12 h : changement d'adresse de SRV-FIC-02
+        (10.10.2.21 vers 10.10.8.21), règles de pare-feu mises à jour,
+        inscription DNS dynamique vérifiée. Statut : terminé avec succès.
+
+dynamiques:
+  round_robin:
+    description: Les postes qui ont 10.10.2.21 en tête de leur cache tentent d'abord l'ancienne adresse (délai de 21 s), puis échouent ou basculent.
+    quand: { periodique: 7m }
+    si:
+      - { chemin: dns.zones.vellane.local.enregistrements.SRV-FIC-02, contient: { donnees: 10.10.2.21 } }
+    effets:
+      - evenement: { machine: PC-PAR-0261, evenement: smbclient/30803, donnees: { erreur: "{Délai d’attente du périphérique dépassé}", serveur: SRV-FIC-02, adresse: "10.10.2.21:445" } }
+
+indices:
+  ip_obsolete_dans_erreur:
+    description: Les échecs SMB visent 10.10.2.21:445, l'ancienne adresse du serveur (événement 30803, ou ping qui répond par moments depuis 10.10.2.21).
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { evenement: smb_ancienne_ip }
+      - { action: machine.ping, cible: PC-PAR-0261, parametres: { destination: SRV-FIC-02 } }
+  deux_enregistrements:
+    description: Resolve-DnsName SRV-FIC-02 renvoie deux adresses, 10.10.2.21 et 10.10.8.21.
+    categorie: diagnostic
+    points: 10
+    revele_par:
+      - { action: machine.dns.resoudre, parametres: { nom: [SRV-FIC-02, SRV-FIC-02.vellane.local] } }
+  enregistrement_statique:
+    description: Dans la zone, 10.10.2.21 est statique (horodatage 0, créé en 2019), 10.10.8.21 est dynamique (inscrit cette nuit).
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: dns.enregistrement.lire, cible: vellane.local }
+  migration:
+    description: CHG0004588 a changé l'adresse du serveur samedi sans nettoyage DNS.
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: document.consulter, cible: CHG0004588 }
+  ip_actuelle:
+    description: SRV-FIC-02 n'a plus que l'adresse 10.10.8.21.
+    categorie: diagnostic
+    points: 2
+    revele_par:
+      - { action: machine.reseau.lire, cible: SRV-FIC-02 }
+  serveur_sain:
+    description: Le serveur répond vite sur sa nouvelle adresse ; ni charge ni erreur côté serveur.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { action: machine.ping, parametres: { destination: 10.10.8.21 } }
+      - { action: machine.reseau.lire, cible: SRV-FIC-02 }
+      - { action: machine.services.lire, cible: SRV-FIC-02 }
+  port_445_ok:
+    description: Test-NetConnection 10.10.8.21 -Port 445 réussit ; aucun pare-feu ne bloque SMB vers la nouvelle adresse.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { action: machine.test_port, parametres: { destination: 10.10.8.21, port: 445 } }
+  plusieurs_postes:
+    description: Deux postes touchés, un voisin épargné sur le même réseau ; ce n'est pas la carte réseau d'un poste.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { question: collegues, ticket: INC0031733 }
+      - { question: collegues, ticket: INC0031740 }
+
+fausses_pistes:
+  serveur_lent:
+    description: Le serveur migré serait lent (stockage, charge, mise à jour).
+    pourquoi_credible: Le serveur a été migré et mis à jour il y a trois jours.
+    eliminee_par: [serveur_sain]
+    actions_inutiles:
+      - { action: machine.redemarrer, cible: SRV-FIC-02 }
+      - { action: machine.service.redemarrer, cible: SRV-FIC-02 }
+    penalite: -10
+  pare_feu:
+    description: Le texte de l'événement 30803 suggère un pare-feu qui bloque le port 445.
+    pourquoi_credible: Les règles de pare-feu ont été modifiées pendant la migration.
+    eliminee_par: [port_445_ok]
+    actions_inutiles:
+      - { action: equipe.contacter, cible: Reseau, si: [{ indice: port_445_ok, revele: false }] }
+    penalite: -5
+  poste_utilisateur:
+    description: La carte réseau ou le Wi-Fi du poste de l'utilisateur.
+    pourquoi_credible: Le voisin n'a pas le problème.
+    eliminee_par: [plusieurs_postes]
+    actions_inutiles:
+      - { action: machine.reseau.configurer, cible: [PC-PAR-0261, PC-PAR-0262] }
+    penalite: -5
+
+pieges:
+  flushdns_seul:
+    description: Clôturer après un vidage du cache DNS des postes alors que l'enregistrement obsolète est toujours dans la zone.
+    declencheur:
+      action: ticket.cloturer
+      cible: [INC0031733, INC0031740]
+      si: [{ chemin: dns.zones.vellane.local.enregistrements.SRV-FIC-02, contient: { donnees: 10.10.2.21 } }]
+    penalite: -10
+    retour: >
+      ipconfig /flushdns fait repartir le poste une fois sur deux : la
+      prochaine résolution peut encore renvoyer 10.10.2.21 en tête. La cause
+      est dans la zone, pas dans le poste.
+  fichier_hosts:
+    description: Forcer 10.10.8.21 dans le fichier hosts des postes.
+    declencheur:
+      action: machine.fichiers.modifier
+      parametres: { chemin: 'C:\Windows\System32\drivers\etc\hosts' }
+    penalite: -10
+    retour: Une entrée hosts masque le problème sur un poste et cassera le jour où le serveur changera encore d'adresse.
+
+actions_dangereuses:
+  suppression_bon_enregistrement:
+    description: Supprimer l'enregistrement 10.10.8.21, ou tous les enregistrements de SRV-FIC-02.
+    declencheur:
+      - action: dns.enregistrement.supprimer
+        cible: vellane.local
+        parametres: { nom: SRV-FIC-02, donnees: 10.10.8.21 }
+      - action: dns.enregistrement.supprimer
+        cible: vellane.local
+        parametres: { nom: SRV-FIC-02, donnees: ~ }
+    penalite: -30
+    gravite: majeure
+    effets:
+      - definir: { chemin: dns.zones.vellane.local.enregistrements.SRV-FIC-02, valeur: [] }
+      - ticket:
+          id: INC0031751
+          ouvert: +6m
+          demandeur: rdubois
+          poste: PC-PAR-0270
+          canal: telephone
+          priorite: P2
+          objet: "Plus aucun accès à Q:"
+          description: "Q: ne s'ouvre plus du tout, chez moi et chez tout le bureau d'études."
+    retour: >
+      Sans l'enregistrement dynamique, plus personne ne résout SRV-FIC-02
+      jusqu'à la prochaine inscription du serveur (24 h, ou ipconfig
+      /registerdns sur le serveur). Supprimer la donnée précise, pas le nom.
+  retour_ancienne_adresse:
+    description: Remettre l'ancienne adresse sur le serveur.
+    declencheur: { action: machine.reseau.configurer, cible: SRV-FIC-02 }
+    penalite: -30
+    gravite: majeure
+    retour: Défaire une migration validée (routage, pare-feu) pour corriger un enregistrement DNS casse l'accès pour tout le monde.
+  nettoyage_agressif:
+    description: Réduire les intervalles de vieillissement de la zone et lancer un nettoyage immédiat.
+    declencheur:
+      - { action: dns.nettoyage.configurer, cible: vellane.local }
+      - { action: dns.nettoyage.lancer }
+    penalite: -40
+    gravite: critique
+    retour: >
+      Le nettoyage ne supprime que les enregistrements dynamiques : il
+      n'aurait pas touché l'enregistrement statique fautif, mais aurait
+      effacé ceux de centaines de postes allumés.
+
+resolution:
+  conditions:
+    - { chemin: dns.zones.vellane.local.enregistrements.SRV-FIC-02, ne_contient_pas: { donnees: 10.10.2.21 } }
+    - { chemin: dns.zones.vellane.local.enregistrements.SRV-FIC-02, contient: { donnees: 10.10.8.21 } }
+  etapes:
+    suppression_a_obsolete:
+      description: Enregistrement A statique 10.10.2.21 supprimé.
+      points: 15
+      valide_par:
+        - si: [{ chemin: dns.zones.vellane.local.enregistrements.SRV-FIC-02, ne_contient_pas: { donnees: 10.10.2.21 } }]
+    ptr_nettoye:
+      description: PTR obsolète 21.2.10.10.in-addr.arpa supprimé.
+      points: 5
+      valide_par:
+        - si: [{ chemin: ['dns', 'zones', '10.10.in-addr.arpa', 'enregistrements', '21.2'], existe: false }]
+    caches_vides:
+      description: Cache DNS vidé sur les postes touchés après la correction (ou attente du TTL).
+      points: 5
+      valide_par:
+        - action: machine.dns.vider_cache
+          cible: [PC-PAR-0261, PC-PAR-0262]
+          si: [{ chemin: dns.zones.vellane.local.enregistrements.SRV-FIC-02, ne_contient_pas: { donnees: 10.10.2.21 } }]
+    verification:
+      description: "Accès à Q: confirmé par un utilisateur après la correction."
+      points: 5
+      valide_par:
+        - action: ticket.demander_action_utilisateur
+          cible: [INC0031733, INC0031740]
+          parametres: { action: ouvrir_lecteur }
+          si: [{ chemin: dns.zones.vellane.local.enregistrements.SRV-FIC-02, ne_contient_pas: { donnees: 10.10.2.21 } }]
+
+communication:
+  cloture:
+    ticket: INC0031733
+    elements:
+      cause:
+        description: Cause (enregistrement DNS statique vers l'ancienne adresse 10.10.2.21).
+        mots_cles: [DNS, enregistrement, ancienne adresse, 10.10.2.21, statique]
+        points: 5
+      action:
+        description: Actions (suppression de l'enregistrement et du PTR, cache vidé).
+        mots_cles: [supprim, PTR, flushdns, cache]
+        points: 5
+      suivi:
+        description: Retour d'expérience sur la migration (ajouter le nettoyage DNS à la procédure, CHG0004588).
+        mots_cles: [migration, CHG0004588, procédure, checklist, liste de contrôle]
+        points: 5
+
+escalade:
+  equipes: [N2-Systemes]
+  delai_cible: 10m
+  indices_attendus:
+    N1: [ip_obsolete_dans_erreur, plusieurs_postes, migration]
+  note:
+    elements:
+      symptome:
+        description: "Symptôme précis (Q: \\\\SRV-FIC-02\\Projets lent ou inaccessible, de façon intermittente)."
+        mots_cles: ['Q:', SRV-FIC-02, lent, inaccessible, intermittent, une fois sur deux]
+        points: 6
+      perimetre:
+        description: Plusieurs postes touchés, un voisin épargné.
+        mots_cles: [plusieurs, Girard, Fontaine, voisin, Dubois]
+        points: 6
+      adresse:
+        description: Ancienne adresse vue dans les erreurs ou le ping.
+        mots_cles: [10.10.2.21, ancienne adresse]
+        points: 10
+      essais:
+        description: Ce qui a déjà été essayé (redémarrage, flushdns).
+        mots_cles: [redémarr, flushdns]
+        points: 4
+      contexte:
+        description: Migration du serveur ce week-end.
+        mots_cles: [migration, CHG0004588, week-end, samedi]
+        points: 4
+
+debrief:
+  - Un problème intermittent qui dépend du poste et du moment fait penser à plusieurs réponses DNS ou à un cache.
+  - L'adresse visée dans l'erreur (30803, ping) dit plus que le message lui-même.
+  - Le vieillissement DNS ne supprime jamais un enregistrement statique ; il faut le retirer à la main lors d'une migration.
+  - On supprime la donnée obsolète, pas le nom entier.
+  - Vider le cache d'un poste ne corrige pas une zone fausse.

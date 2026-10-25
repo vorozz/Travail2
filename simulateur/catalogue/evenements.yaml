@@ -1,0 +1,826 @@
+# Catalogue des événements Windows utilisés par les scénarios.
+#
+# Clé : alias court « famille/ID ». Chaque entrée donne le vrai fournisseur
+# (source), le journal, le niveau par défaut et le modèle du message tel
+# qu'il apparaît sur un Windows en français. Les scénarios fournissent les
+# `donnees` qui remplissent les {champs} du modèle.
+#
+# Champs remplis par le moteur (à ne pas fournir) : {machine} (nom court de
+# la machine qui journalise), {machine_fqdn}.
+#
+# Niveaux : Information, Avertissement, Erreur, Critique,
+#           « Succès de l'audit », « Échec de l'audit ».
+
+schema: evenements/1
+
+evenements:
+
+  # --- Sécurité --------------------------------------------------------------
+  securite/4624:
+    id: 4624
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Succès de l'audit
+    modele: |
+      L’ouverture de session d’un compte s’est correctement déroulée.
+
+      Informations d’ouverture de session :
+      	Type d’ouverture de session :		{type}
+
+      Nouvelle ouverture de session :
+      	ID de sécurité :		VELLANE\{compte}
+      	Nom du compte :		{compte}
+      	Domaine du compte :		VELLANE
+
+      Informations sur le réseau :
+      	Nom de la station de travail :	{station}
+      	Adresse du réseau source :	{ip_client}
+
+      Informations détaillées sur l’authentification :
+      	Processus d’ouverture de session :		{processus}
+      	Package d’authentification :	{package}
+
+  securite/4625:
+    id: 4625
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Échec de l'audit
+    modele: |
+      Échec d’ouverture de session d’un compte.
+
+      Informations d’ouverture de session :
+      	Type d’ouverture de session :		{type}
+
+      Compte pour lequel l’ouverture de session a échoué :
+      	ID de sécurité :		NULL SID
+      	Nom du compte :		{compte}
+      	Domaine du compte :		VELLANE
+
+      Informations sur l’échec :
+      	Raison de l’échec :		{raison}
+      	Statut :			{statut}
+      	Sous-état :		{sous_etat}
+
+      Informations sur le réseau :
+      	Nom de la station de travail :	{station}
+      	Adresse du réseau source :	{ip_client}
+
+  securite/4720:
+    id: 4720
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Succès de l'audit
+    modele: |
+      Un compte d’utilisateur a été créé.
+
+      Sujet :
+      	ID de sécurité :		VELLANE\{auteur}
+      	Nom du compte :		{auteur}
+      	Domaine du compte :		VELLANE
+
+      Nouveau compte :
+      	ID de sécurité :		VELLANE\{compte}
+      	Nom du compte :		{compte}
+      	Domaine du compte :		VELLANE
+
+  securite/4723:
+    id: 4723
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Échec de l'audit
+    modele: |
+      Une tentative de modification du mot de passe d’un compte a été effectuée.
+
+      Sujet :
+      	ID de sécurité :		VELLANE\{compte}
+      	Nom du compte :		{compte}
+      	Domaine du compte :		VELLANE
+
+      Compte cible :
+      	ID de sécurité :		VELLANE\{compte}
+      	Nom du compte :		{compte}
+      	Domaine du compte :		VELLANE
+
+  securite/4728:
+    id: 4728
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Succès de l'audit
+    modele: |
+      Un membre a été ajouté à un groupe global dont la sécurité est activée.
+
+      Sujet :
+      	ID de sécurité :		VELLANE\{auteur}
+      	Nom du compte :		{auteur}
+      	Domaine du compte :		VELLANE
+
+      Membre :
+      	ID de sécurité :		VELLANE\{membre}
+      	Nom du compte :		{membre_dn}
+
+      Groupe :
+      	ID de sécurité :		VELLANE\{groupe}
+      	Nom du groupe :		{groupe}
+      	Domaine du groupe :		VELLANE
+
+  securite/4739:
+    id: 4739
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Succès de l'audit
+    modele: |
+      La stratégie de domaine a été modifiée.
+
+      Type de modification :		{type_modification}
+
+      Sujet :
+      	ID de sécurité :		VELLANE\{auteur}
+      	Nom du compte :		{auteur}
+
+      Domaine :
+      	Nom du domaine :		VELLANE
+
+      Stratégie modifiée :
+      	{parametre} :		{valeur}
+
+  securite/4740:
+    id: 4740
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Succès de l'audit
+    modele: |
+      Un compte d’utilisateur a été verrouillé.
+
+      Sujet :
+      	ID de sécurité :		S-1-5-18
+      	Nom du compte :		{machine}$
+      	Domaine du compte :		VELLANE
+      	ID d’ouverture de session :		0x3E7
+
+      Compte verrouillé :
+      	ID de sécurité :		VELLANE\{compte}
+      	Nom du compte :		{compte}
+
+      Informations supplémentaires :
+      	Nom de l’ordinateur appelant :		{appelant}
+
+  securite/4742:
+    id: 4742
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Succès de l'audit
+    modele: |
+      Un compte d’ordinateur a été modifié.
+
+      Sujet :
+      	ID de sécurité :		VELLANE\{auteur}
+      	Nom du compte :		{auteur}
+      	Domaine du compte :		VELLANE
+
+      Compte d’ordinateur modifié :
+      	ID de sécurité :		VELLANE\{ordinateur}$
+      	Nom du compte :		{ordinateur}$
+      	Domaine du compte :		VELLANE
+
+      Attributs modifiés :
+      	Ancienne valeur du contrôle de compte :		{uac_ancien}
+      	Nouvelle valeur du contrôle de compte :		{uac_nouveau}
+      	Contrôle du compte utilisateur :	{uac_texte}
+
+  securite/4767:
+    id: 4767
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Succès de l'audit
+    modele: |
+      Un compte d’utilisateur a été déverrouillé.
+
+      Sujet :
+      	ID de sécurité :		VELLANE\{auteur}
+      	Nom du compte :		{auteur}
+      	Domaine du compte :		VELLANE
+
+      Compte cible :
+      	ID de sécurité :		VELLANE\{compte}
+      	Nom du compte :		{compte}
+      	Domaine du compte :		VELLANE
+
+  securite/4768:
+    id: 4768
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Succès de l'audit
+    modele: |
+      Un ticket d’authentification Kerberos (TGT) a été demandé.
+
+      Informations sur le compte :
+      	Nom du compte :		{compte}
+      	Nom de domaine fourni :		VELLANE
+
+      Informations sur le service :
+      	Nom du service :		krbtgt
+      	ID du service :		VELLANE\krbtgt
+
+      Informations sur le réseau :
+      	Adresse du client :		::ffff:{ip_client}
+      	Port du client :		{port}
+
+      Informations supplémentaires :
+      	Options du ticket :		0x40810010
+      	Code de résultat :		{code}
+      	Type de chiffrement du ticket :	0xFFFFFFFF
+      	Type de pré-authentification :	-
+
+  securite/4771:
+    id: 4771
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Échec de l'audit
+    modele: |
+      La pré-authentification Kerberos a échoué.
+
+      Informations sur le compte :
+      	ID de sécurité :		VELLANE\{compte}
+      	Nom du compte :		{compte}
+
+      Informations sur le service :
+      	Nom du service :		krbtgt/VELLANE
+
+      Informations sur le réseau :
+      	Adresse du client :		::ffff:{ip_client}
+      	Port du client :		{port}
+
+      Informations supplémentaires :
+      	Options du ticket :		0x40810010
+      	Code d’échec :		{code}
+      	Type de pré-authentification :	2
+
+      Les types de pré-authentification, les options de ticket et les codes d’échec sont définis dans la RFC 4120.
+
+  securite/4776:
+    id: 4776
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Échec de l'audit
+    modele: |
+      L’ordinateur a tenté de valider les informations d’identification d’un compte.
+
+      Package d’authentification :	MICROSOFT_AUTHENTICATION_PACKAGE_V1_0
+      Compte d’ouverture de session :	{compte}
+      Station de travail source :	{station}
+      Code d’erreur :	{code}
+
+  securite/5136:
+    id: 5136
+    source: Microsoft-Windows-Security-Auditing
+    journal: Security
+    niveau: Succès de l'audit
+    modele: |
+      Un objet du service d’annuaire a été modifié.
+
+      Sujet :
+      	ID de sécurité :		VELLANE\{auteur}
+      	Nom du compte :		{auteur}
+
+      Objet :
+      	Nom DN :		{dn}
+      	Classe :		{classe}
+
+      Attribut :
+      	Nom LDAP :		{attribut}
+      	Valeur :		{valeur}
+
+      Opération :
+      	Type :		Valeur ajoutée
+
+  # --- Sessions --------------------------------------------------------------
+  lsm/21:
+    id: 21
+    source: Microsoft-Windows-TerminalServices-LocalSessionManager
+    journal: Microsoft-Windows-TerminalServices-LocalSessionManager/Operational
+    niveau: Information
+    modele: |
+      Services Bureau à distance : ouverture de session réussie :
+
+      Utilisateur : VELLANE\{compte}
+      ID de session : {session}
+      Adresse réseau source : LOCAL
+
+  lsm/24:
+    id: 24
+    source: Microsoft-Windows-TerminalServices-LocalSessionManager
+    journal: Microsoft-Windows-TerminalServices-LocalSessionManager/Operational
+    niveau: Information
+    modele: |
+      Services Bureau à distance : la session a été déconnectée :
+
+      Utilisateur : VELLANE\{compte}
+      ID de session : {session}
+      Adresse réseau source : LOCAL
+
+  # --- Netlogon, Kerberos, LSA ----------------------------------------------
+  netlogon/3210:
+    id: 3210
+    source: NETLOGON
+    journal: System
+    niveau: Erreur
+    modele: >-
+      Cet ordinateur n’a pas pu s’authentifier avec \\{dc}.vellane.local, un
+      contrôleur de domaine Windows pour le domaine VELLANE, et par
+      conséquent, cet ordinateur risque de refuser les demandes de connexion.
+      Ce problème d’authentification peut être dû à un autre ordinateur
+      présent sur le même réseau utilisant le même nom ou à l’absence de
+      reconnaissance du mot de passe de ce compte d’ordinateur. Si ce message
+      apparaît à nouveau, contactez votre administrateur système.
+
+  netlogon/5719:
+    id: 5719
+    source: NETLOGON
+    journal: System
+    niveau: Erreur
+    modele: |
+      Cet ordinateur n’a pas pu configurer une session sécurisée avec un contrôleur de domaine du domaine {domaine} pour la raison suivante :
+      {raison}
+      Cela peut entraîner des problèmes d’authentification. Assurez-vous que cet ordinateur est connecté au réseau. Si le problème persiste, contactez votre administrateur de domaine.
+
+      INFORMATIONS SUPPLÉMENTAIRES
+      Si cet ordinateur est un contrôleur de domaine pour le domaine spécifié, il configure la session sécurisée vers l’émulateur de contrôleur de domaine principal dans le domaine spécifié. Sinon, cet ordinateur configure la session sécurisée vers n’importe quel contrôleur de domaine dans le domaine spécifié.
+
+  netlogon/5805:
+    id: 5805
+    source: NETLOGON
+    journal: System
+    niveau: Erreur
+    modele: |
+      La configuration de session à partir de l’ordinateur {ordinateur} n’a pas pu s’authentifier. L’erreur suivante s’est produite :
+      {raison}
+
+  netlogon/5774:
+    id: 5774
+    source: NETLOGON
+    journal: System
+    niveau: Erreur
+    modele: |
+      L’inscription dynamique de l’enregistrement DNS « {enregistrement} » a échoué sur le serveur DNS suivant :
+
+      Adresse IP du serveur DNS : {serveur}
+      Code de retour : {code}
+
+      Pour que les autres ordinateurs et services puissent localiser ce serveur en tant que contrôleur de domaine dans le domaine spécifié, l’enregistrement DNS doit être inscrit dans le DNS.
+
+  kdc/11:
+    id: 11
+    source: Microsoft-Windows-Kerberos-Key-Distribution-Center
+    journal: System
+    niveau: Erreur
+    modele: >-
+      Le centre de distribution de clés (KDC) a rencontré des noms en double
+      lors du traitement d’une demande d’authentification Kerberos. Le nom en
+      double est {nom} (de type {type}). Cela peut entraîner des échecs
+      d’authentification ou des rétrogradations vers NTLM. Pour éviter ce
+      problème, supprimez les entrées en double de {nom} dans Active
+      Directory.
+
+  lsasrv/40960:
+    id: 40960
+    source: LsaSrv
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      Le système de sécurité a détecté une erreur d’authentification pour le
+      serveur {serveur}. Le code d’échec du protocole d’authentification
+      Kerberos était « {erreur} ».
+
+  lsasrv/40961:
+    id: 40961
+    source: LsaSrv
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      Le système de sécurité n’a pas pu établir une connexion sécurisée avec
+      le serveur {serveur}. Aucun protocole d’authentification n’était
+      disponible.
+
+  # --- Service de temps ------------------------------------------------------
+  w32time/35:
+    id: 35
+    source: Microsoft-Windows-Time-Service
+    journal: System
+    niveau: Information
+    modele: >-
+      Le service de temps synchronise maintenant l’heure système avec la
+      source de temps {source}.
+
+  w32time/36:
+    id: 36
+    source: Microsoft-Windows-Time-Service
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      Le service de temps n’a pas synchronisé l’heure système pendant
+      {secondes} secondes car aucun des fournisseurs de temps n’a fourni
+      d’horodatage utilisable. Le service de temps ne met pas à jour l’heure
+      locale du système tant qu’il ne parvient pas à se synchroniser avec une
+      source de temps. Le service de temps continuera à tenter de se
+      synchroniser et à mettre à jour l’heure locale du système dès qu’une
+      source de temps sera disponible. Consultez le journal des événements
+      système pour d’autres événements du service de temps, puis exécutez
+      « w32tm /resync » pour forcer une synchronisation immédiate.
+
+  w32time/47:
+    id: 47
+    source: Microsoft-Windows-Time-Service
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      Le fournisseur de temps NtpClient n’a reçu aucune réponse valide de
+      l’homologue configuré manuellement {homologue} après 8 tentatives de
+      contact. Cet homologue ne sera plus utilisé comme source de temps et
+      NtpClient tentera de découvrir un nouvel homologue avec ce nom DNS.
+      Erreur : Aucune réponse n’a été reçue de NTP. (0x800705B4)
+
+  w32time/129:
+    id: 129
+    source: Microsoft-Windows-Time-Service
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      NtpClient n’a pas pu définir une source de temps du domaine car il a
+      rencontré une erreur lors de la recherche de contrôleurs de domaine.
+      NtpClient réessaiera dans {minutes} minutes et doublera le temps
+      d’attente à chaque nouvelle tentative. L’erreur était : {erreur}
+
+  kernel-general/1:
+    id: 1
+    source: Microsoft-Windows-Kernel-General
+    journal: System
+    niveau: Information
+    modele: |
+      L’heure système est passée de {ancienne} à {nouvelle}.
+
+      Raison de la modification : {raison}
+
+  # --- Services, système -------------------------------------------------------
+  scm/7031:
+    id: 7031
+    source: Service Control Manager
+    journal: System
+    niveau: Erreur
+    modele: >-
+      Le service {service} s’est arrêté de façon inattendue. Il s’est produit
+      {n} fois. L’action corrective suivante va être effectuée dans {delai}
+      millisecondes : {action}.
+
+  scm/7034:
+    id: 7034
+    source: Service Control Manager
+    journal: System
+    niveau: Erreur
+    modele: >-
+      Le service {service} s’est arrêté de façon inattendue. Il s’est produit
+      {n} fois.
+
+  scm/7036:
+    id: 7036
+    source: Service Control Manager
+    journal: System
+    niveau: Information
+    modele: "Le service {service} est entré dans l’état : {etat}."
+
+  srv/2013:
+    id: 2013
+    source: srv
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      Le disque {disque} est à sa capacité maximale ou presque. Vous aurez
+      peut-être besoin de supprimer des fichiers sur ce disque.
+
+  dcom/10016:
+    id: 10016
+    source: Microsoft-Windows-DistributedCOM
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      Les paramètres d’autorisation propres à l’application n’accordent pas
+      l’autorisation Activation locale pour l’application serveur COM avec le
+      CLSID {clsid} et l’APPID {appid} au SID {sid} de l’utilisateur
+      {compte}, adresse LocalHost (avec LRPC), s’exécutant dans le SID de
+      conteneur d’application Non disponible (Non disponible). Cette
+      autorisation de sécurité peut être modifiée à l’aide de l’outil
+      d’administration Services de composants.
+
+  windowsupdate/19:
+    id: 19
+    source: Microsoft-Windows-WindowsUpdateClient
+    journal: System
+    niveau: Information
+    modele: "Installation réussie : Windows a installé la mise à jour suivante : {mise_a_jour}"
+
+  grouppolicy/1500:
+    id: 1500
+    source: Microsoft-Windows-GroupPolicy
+    journal: System
+    niveau: Information
+    modele: >-
+      Les paramètres de la stratégie de groupe pour l’ordinateur ont été
+      traités correctement. Aucune modification n’a été détectée depuis le
+      dernier traitement réussi de la stratégie de groupe.
+
+  grouppolicy/1502:
+    id: 1502
+    source: Microsoft-Windows-GroupPolicy
+    journal: System
+    niveau: Information
+    modele: >-
+      Les paramètres de la stratégie de groupe pour l’ordinateur ont été
+      traités correctement. De nouveaux paramètres de {n} objets de stratégie
+      de groupe ont été détectés et appliqués.
+
+  # --- Réseau, DHCP, DNS ---------------------------------------------------
+  dhcp-client/1001:
+    id: 1001
+    source: Microsoft-Windows-Dhcp-Client
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      Votre ordinateur n’a pas reçu d’adresse du réseau (par le serveur DHCP)
+      pour la carte réseau dont l’adresse réseau est 0x{mac}. L’erreur
+      suivante s’est produite : 0x79. Votre ordinateur va continuer à essayer
+      d’obtenir une adresse lui-même auprès du serveur d’adresses réseau
+      (DHCP).
+
+  dns-client/1014:
+    id: 1014
+    source: Microsoft-Windows-DNS-Client
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      La résolution de noms pour le nom {nom} a expiré une fois qu’aucun des
+      serveurs DNS configurés n’a répondu.
+
+  dhcp-serveur/1020:
+    id: 1020
+    source: Microsoft-Windows-DHCP-Server
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      L’étendue, {etendue}, est utilisée à {pourcentage} pour cent et il ne
+      reste que {restantes} adresses IP.
+
+  dhcp-serveur/1063:
+    id: 1063
+    source: Microsoft-Windows-DHCP-Server
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      Aucune adresse IP n’est disponible pour bail dans l’étendue ou la
+      super-étendue « {etendue} ».
+
+  smbclient/30803:
+    id: 30803
+    source: Microsoft-Windows-SMBClient
+    journal: Microsoft-Windows-SMBClient/Connectivity
+    niveau: Erreur
+    modele: |
+      Échec de l’établissement d’une connexion réseau.
+
+      Erreur : {erreur}
+
+      Nom du serveur : {serveur}
+      Adresse du serveur : {adresse}
+      Type de connexion : Wsk
+
+      Aide :
+      Cela indique un problème avec la mise en réseau TCP/IP sous-jacente et non avec SMB. Un pare-feu qui bloque le port TCP 445, ou le port TCP 5445 lors de l’utilisation d’un adaptateur RDMA iWARP, peut également provoquer ce problème.
+
+  dns-serveur/4013:
+    id: 4013
+    source: Microsoft-Windows-DNS-Server-Service
+    journal: DNS Server
+    niveau: Avertissement
+    modele: >-
+      Le serveur DNS attend que les services de domaine Active Directory
+      (AD DS) signalent que la synchronisation initiale de l’annuaire est
+      terminée. Le service du serveur DNS ne peut pas démarrer tant que la
+      synchronisation initiale n’est pas terminée, car les données DNS
+      critiques peuvent ne pas encore être répliquées sur ce contrôleur de
+      domaine. Si les événements dans le journal AD DS indiquent qu’il y a un
+      problème avec la résolution des noms DNS, envisagez d’ajouter l’adresse
+      IP d’un autre serveur DNS pour ce domaine à la liste des serveurs DNS
+      dans les propriétés Protocole Internet de cet ordinateur.
+
+  # --- Service d'annuaire, DFSR ---------------------------------------------
+  ntds/1864:
+    id: 1864
+    source: Microsoft-Windows-ActiveDirectory_DomainService
+    journal: Directory Service
+    niveau: Erreur
+    modele: |
+      Voici l’état de réplication de la partition d’annuaire suivante sur ce serveur d’annuaire.
+
+      Partition d’annuaire :
+      {partition}
+
+      Ce serveur d’annuaire n’a pas reçu d’informations de réplication d’un certain nombre de serveurs d’annuaire dans l’intervalle de latence configuré.
+
+      Intervalle de latence (heures) :
+      24
+      Nombre de serveurs d’annuaire dans tous les sites :
+      {nb_tous}
+      Nombre de serveurs d’annuaire dans ce site :
+      {nb_site}
+
+  ntds/1925:
+    id: 1925
+    source: Microsoft-Windows-ActiveDirectory_DomainService
+    journal: Directory Service
+    niveau: Avertissement
+    modele: |
+      La tentative d’établissement d’un lien de réplication pour la partition d’annuaire accessible en écriture suivante a échoué.
+
+      Partition d’annuaire :
+      {partition}
+      Contrôleur de domaine source :
+      CN=NTDS Settings,CN={source},CN=Servers,CN={site_source},CN=Sites,CN=Configuration,DC=vellane,DC=local
+      Adresse du contrôleur de domaine source :
+      {guid}._msdcs.vellane.local
+      Transport intersite (le cas échéant) :
+
+      Ce contrôleur de domaine ne pourra pas répliquer avec le contrôleur de domaine source tant que ce problème ne sera pas résolu.
+
+      Action utilisateur
+      Vérifiez si le contrôleur de domaine source est accessible ou si le réseau fonctionne correctement.
+
+      Informations supplémentaires :
+      Résultat de l’erreur :
+      {erreur}
+      {code}
+
+  ntds/2087:
+    id: 2087
+    source: Microsoft-Windows-ActiveDirectory_DomainService
+    journal: Directory Service
+    niveau: Erreur
+    modele: |
+      Les services de domaine Active Directory n’ont pas pu résoudre le nom DNS suivant du contrôleur de domaine source en adresse IP. Cette erreur empêche les ajouts, suppressions et modifications des services de domaine Active Directory de se répliquer entre un ou plusieurs contrôleurs de domaine dans la forêt. Les groupes de sécurité, la stratégie de groupe, les utilisateurs et les ordinateurs ainsi que leurs mots de passe seront incohérents entre les contrôleurs de domaine jusqu’à ce que cette erreur soit résolue, ce qui peut affecter l’authentification par ouverture de session et l’accès aux ressources réseau.
+
+      Contrôleur de domaine source :
+      {source}
+      Nom d’hôte DNS en échec :
+      {guid}._msdcs.vellane.local
+
+      Action utilisateur :
+      1) Si le contrôleur de domaine source n’est plus en service ou si son système d’exploitation a été réinstallé avec un nom d’ordinateur différent ou un nouvel objet NTDSDSA GUID, supprimez les métadonnées du contrôleur de domaine source avec ntdsutil.exe.
+      2) Vérifiez que le contrôleur de domaine source exécute les services de domaine Active Directory et qu’il est accessible sur le réseau en tapant « net view \\<nom du contrôleur source> » ou « ping <nom du contrôleur source> ».
+      3) Vérifiez que le contrôleur de domaine source utilise un serveur DNS valide et que ses enregistrements d’hôte et CNAME sont correctement inscrits (dcdiag /test:dns).
+      4) Vérifiez que ce contrôleur de domaine de destination utilise un serveur DNS valide (dcdiag /test:dns sur ce contrôleur).
+
+      Informations supplémentaires
+      Erreur :
+      8524 L’opération DSA ne peut pas continuer en raison d’un échec de recherche DNS.
+
+  dfsr/5002:
+    id: 5002
+    source: DFSR
+    journal: DFS Replication
+    niveau: Erreur
+    modele: |
+      Le service de réplication DFS a rencontré une erreur lors de la communication avec le partenaire {partenaire} pour le groupe de réplication Domain System Volume.
+
+      Nom du partenaire : {partenaire}
+      Adresse DNS du partenaire : {partenaire}.vellane.local
+
+      Informations supplémentaires :
+      Erreur : {erreur}
+
+  dfsr/5004:
+    id: 5004
+    source: DFSR
+    journal: DFS Replication
+    niveau: Information
+    modele: |
+      Le service de réplication DFS a correctement établi une connexion entrante avec le partenaire {partenaire} pour le groupe de réplication Domain System Volume.
+
+  # --- Applications ----------------------------------------------------------
+  app-error/1000:
+    id: 1000
+    source: Application Error
+    journal: Application
+    niveau: Erreur
+    modele: |
+      Nom de l’application défaillante {application}, version : {version}
+      Nom du module défaillant : {module}, version : {version_module}
+      Code d’exception : {exception}
+      Décalage d’erreur : {decalage}
+      ID du processus défaillant : {pid}
+      Chemin d’accès de l’application défaillante : {chemin}
+      Chemin d’accès du module défaillant : {chemin_module}
+      ID de rapport : {rapport}
+
+  dotnet/1026:
+    id: 1026
+    source: .NET Runtime
+    journal: Application
+    niveau: Erreur
+    modele: |
+      Application : {application}
+      Version du Framework : v4.0.30319
+      Description : le processus a été arrêté en raison d’une exception non gérée.
+      Informations sur l’exception : {exception}
+      {pile}
+
+  msi/1033:
+    id: 1033
+    source: MsiInstaller
+    journal: Application
+    niveau: Information
+    modele: >-
+      Windows Installer a installé le produit. Nom du produit : {produit}.
+      Version du produit : {version}. Langue du produit : 1036. Fabricant :
+      {fabricant}. État de réussite ou d’erreur de l’installation : {statut}.
+
+  msi/11707:
+    id: 11707
+    source: MsiInstaller
+    journal: Application
+    niveau: Information
+    modele: "Produit : {produit} -- L’installation s’est terminée correctement."
+
+  msi/11708:
+    id: 11708
+    source: MsiInstaller
+    journal: Application
+    niveau: Erreur
+    modele: "Produit : {produit} -- L’installation a échoué."
+
+  msi/11904:
+    id: 11904
+    source: MsiInstaller
+    journal: Application
+    niveau: Erreur
+    modele: >-
+      Produit : {produit} -- Erreur 1904. Le module {module} n’a pas pu être
+      inscrit. HRESULT {hresult}. Contactez votre personnel de support
+      technique.
+
+  bouclier/1116:
+    id: 1116
+    source: Bouclier Antivirus
+    journal: Application
+    niveau: Avertissement
+    modele: |
+      Menace détectée et mise en quarantaine.
+      Nom : {menace}
+      Fichier : {fichier}
+      Processus : {processus}
+      Action : Quarantaine (réussie)
+
+  sxs/33:
+    id: 33
+    source: SideBySide
+    journal: Application
+    niveau: Erreur
+    modele: >-
+      La génération du contexte d’activation a échoué pour « {fichier} ».
+      L’assembly dépendant {assembly} est introuvable. Utilisez sxstrace.exe
+      pour un diagnostic détaillé.
+
+  # --- Certificats, TLS, IIS ----------------------------------------------
+  schannel/36887:
+    id: 36887
+    source: Schannel
+    journal: System
+    niveau: Erreur
+    modele: >-
+      Une alerte fatale a été reçue du point de terminaison distant. Le code
+      d’alerte fatale défini par le protocole TLS est {code}.
+
+  httpevent/15021:
+    id: 15021
+    source: HttpEvent
+    journal: System
+    niveau: Avertissement
+    modele: >-
+      Une erreur s’est produite lors de l’utilisation de la configuration SSL
+      pour le point de terminaison {point}. Le code d’état d’erreur est
+      contenu dans les données retournées.
+
+  autoenrollment/64:
+    id: 64
+    source: Microsoft-Windows-CertificateServicesClient-AutoEnrollment
+    journal: Application
+    niveau: Avertissement
+    modele: >-
+      Le certificat pour le système local avec l’empreinte numérique
+      {empreinte} est sur le point d’expirer ou a déjà expiré.
+
+  certsvc/74:
+    id: 74
+    source: Microsoft-Windows-CertificationAuthority
+    journal: Application
+    niveau: Erreur
+    modele: >-
+      Les services de certificats Active Directory n’ont pas pu publier une
+      liste de révocation de certificats delta pour la clé {cle} à
+      l’emplacement suivant : {emplacement}. {erreur}

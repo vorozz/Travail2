@@ -1,0 +1,341 @@
+schema: scenario/1
+id: N2-10
+titre: Échec d'authentification Kerberos sur un seul poste, décalage horaire de plus de 5 minutes
+niveau: N2
+temps_cible: 25m
+environnement: vellane
+horloge: 2026-11-18T08:55:00+01:00
+competences: [kerberos, w32time, journaux_poste, correlation_temporelle]
+
+resume: >
+  Sur le poste d'Antoine Mercier (Nantes), Outlook redemande sans cesse le
+  mot de passe et les partages refusent l'accès ; son compte marche ailleurs.
+  L'horloge du poste avance de 7 min 42 s : le logiciel de badges installé le
+  20 octobre a configuré time.windows.com comme source de temps, injoignable
+  à travers le pare-feu, et le poste dérive depuis. L'utilisateur accuse la
+  mise à jour Windows du 10 novembre, qui n'y est pour rien.
+cause_racine: >
+  w32tm configuré en NTP manuel (time.windows.com,0x9) par le script
+  d'installation de TempoPointe Admin 3.1 le 20/10. Le flux NTP vers Internet
+  est bloqué : le poste tourne sur son horloge interne (Local CMOS Clock) et
+  dérive d'environ 16 s par jour. Au-delà de 5 minutes d'écart, les DC
+  rejettent ses demandes Kerberos (KRB_AP_ERR_SKEW, 0x25).
+
+tickets:
+  INC0031790:
+    ouvert: -25m
+    demandeur: amercier
+    poste: PC-NTE-0042
+    canal: portail
+    priorite: P3
+    objet: "Outlook demande sans arrêt mon mot de passe, plus d'accès au lecteur S:"
+    description: |
+      Depuis la mise à jour Windows de la semaine dernière, Outlook me redemande
+      mon mot de passe plusieurs fois par jour. Depuis hier, je n'ai plus accès
+      au lecteur S: ni à l'intranet (« accès refusé »). Mon mot de passe est
+      bon, je l'ai changé il y a trois semaines.
+    reponses:
+      depuis_quand: Les demandes de mot de passe ont commencé il y a une dizaine de jours, à peu près au moment de la mise à jour. Le lecteur S:, c'est depuis hier.
+      autre_poste: Sur le PC de l'accueil, avec mon compte, tout marche, Outlook compris.
+      collegues: Les autres à Nantes n'ont rien.
+      changement_recent: Il y a un mois, j'ai installé le logiciel de gestion des badges visiteurs, TempoPointe. Et il y a eu la mise à jour Windows.
+      deja_essaye: J'ai redémarré, et j'ai retapé mon mot de passe dans Outlook.
+      message_exact: Pour S:, « Accès refusé ». Pour l'intranet, il redemande un identifiant.
+      par_defaut: Je ne sais pas.
+    retours:
+      ouvrir_lecteur:
+        - si: [{ chemin: postes.PC-NTE-0042.horloge.decalage, abs_inf: 5m }, { chemin: postes.PC-NTE-0042.kerberos.tickets_purges, egal: true }]
+          message: "S: s'ouvre, l'intranet aussi, et Outlook ne demande plus rien."
+        - si: [{ chemin: postes.PC-NTE-0042.horloge.decalage, abs_inf: 5m }]
+          message: "S: s'ouvre maintenant. Outlook demande encore une fois le mot de passe..."
+        - message: Toujours « Accès refusé ».
+      fermer_session:
+        - si: [{ chemin: postes.PC-NTE-0042.horloge.decalage, abs_inf: 5m }]
+          message: Je me suis reconnecté, tout fonctionne.
+          effets:
+            - definir: { chemin: postes.PC-NTE-0042.kerberos.tickets_purges, valeur: true }
+        - message: Je me suis reconnecté, c'est pareil.
+
+monde:
+  postes:
+    PC-NTE-0042:
+      logiciels: [TempoPointe Admin 3.1]
+      horloge:
+        decalage: +7m42s
+        derive: +16s/j
+        type: NTP
+        configuration: { ntpserver: "time.windows.com,0x9", type: NTP }
+        source: Local CMOS Clock
+        derniere_synchro: -29j
+      kerberos: { tickets_purges: false }
+      journaux:
+        - evenement: msi/1033
+          ref: install_tempopointe
+          t: -29j1h20m
+          donnees: { produit: TempoPointe Admin, version: 3.1.0.412, fabricant: TempoPointe, statut: "0" }
+        - evenement: w32time/47
+          ref: ntp_injoignable_debut
+          t: -29j1h
+          repeter: { intervalle: 1j, jusqu_a: -1h }
+          donnees: { homologue: "time.windows.com,0x9" }
+        - evenement: w32time/36
+          t: -28j
+          repeter: { intervalle: 1j, jusqu_a: -1h }
+          donnees: { secondes: "86400" }
+        - evenement: windowsupdate/19
+          ref: maj_windows
+          t: -7j20h25m
+          donnees: { mise_a_jour: "2026-11 Mise à jour cumulative pour Windows 11 Version 23H2 pour les systèmes x64 (KB5068843)" }
+        - evenement: lsasrv/40960
+          ref: skew_cifs
+          t: -9j
+          repeter: { intervalle: 2h, jusqu_a: -10m }
+          donnees: { serveur: cifs/SRV-FIC-01.vellane.local, erreur: "L’heure et/ou la date sont différentes sur le client et le serveur. (0xc0000133)" }
+        - evenement: lsasrv/40960
+          t: -1h
+          repeter: { intervalle: 15m, jusqu_a: -5m }
+          donnees: { serveur: ldap/DC-NTE-01.vellane.local, erreur: "L’heure et/ou la date sont différentes sur le client et le serveur. (0xc0000133)" }
+        - evenement: dcom/10016
+          t: -50m
+          donnees: { clsid: "{2593F8B9-4EAF-457C-B68A-50F6B8EA6B54}", appid: "{15C20B67-12E7-4BB6-92BB-7AFF07997402}", sid: S-1-5-21-3021597742-1873450312-2264317895-6042, compte: VELLANE\amercier }
+  controleurs:
+    DC-NTE-01:
+      journaux:
+        - evenement: securite/4771
+          ref: skew_dc
+          t: -1h
+          repeter: { intervalle: 4m, jusqu_a: -1m }
+          donnees: { compte: amercier, ip_client: 10.30.10.42, port: 50771, code: "0x25" }
+        - evenement: securite/4771
+          t: -50m
+          repeter: { intervalle: 20m, jusqu_a: -10m }
+          donnees: { compte: PC-NTE-0042$, ip_client: 10.30.10.42, port: 49812, code: "0x25" }
+        - evenement: w32time/129
+          ref: ancien_129
+          t: -21j
+          donnees: { minutes: "15", erreur: Aucun contrôleur de domaine n’est disponible pour ce domaine. (0x8007054B) }
+        - evenement: w32time/35
+          t: -20j23h50m
+          donnees: { source: "DC-PAR-01.vellane.local (ntp.d|10.30.1.10:123->10.10.1.10:123)" }
+  documents:
+    TP-ADMIN-31:
+      titre: TempoPointe Admin 3.1 - notice d'installation (éditeur)
+      contenu: >
+        Le lecteur de badges exige une heure exacte. Le programme d'installation
+        configure le service de temps Windows sur time.windows.com
+        (w32tm /config /manualpeerlist:time.windows.com /syncfromflags:manual).
+        Sur un poste membre d'un domaine, conserver la synchronisation sur le
+        domaine.
+
+indices:
+  erreur_horloge:
+    description: "LsaSrv 40960 sur le poste : « L'heure et/ou la date sont différentes sur le client et le serveur (0xc0000133) » pour cifs/SRV-FIC-01 et ldap/DC-NTE-01."
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { evenement: skew_cifs }
+  decalage_mesure:
+    description: Le poste avance de 7 min 42 s sur DC-NTE-01 (w32tm /stripchart, ou comparaison de l'heure affichée).
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: machine.heure.lire, cible: PC-NTE-0042, parametres: { vue: stripchart } }
+      - { action: machine.heure.afficher, cible: PC-NTE-0042 }
+  source_manuelle:
+    description: w32tm affiche une source manuelle time.windows.com,0x9 (type NTP), aucune synchronisation depuis le 20/10 ; W32Time 47 tous les jours.
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: machine.heure.lire, cible: PC-NTE-0042, parametres: { vue: [source, configuration, status] } }
+      - { evenement: ntp_injoignable_debut }
+  skew_cote_dc:
+    description: DC-NTE-01 rejette les demandes Kerberos du poste avec le code 0x25 (horloge trop décalée).
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { evenement: skew_dc }
+  installation_tempopointe:
+    description: Les échecs NTP commencent le jour de l'installation de TempoPointe Admin 3.1 (20/10).
+    categorie: diagnostic
+    points: 2
+    revele_par:
+      - { evenement: install_tempopointe }
+      - { question: changement_recent, ticket: INC0031790 }
+      - { action: document.consulter, cible: TP-ADMIN-31 }
+  compte_ok:
+    description: Le compte fonctionne sur un autre poste ; le problème est propre au poste.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { question: autre_poste, ticket: INC0031790 }
+  mise_a_jour_hors_cause:
+    description: Les échecs de synchronisation (W32Time 47) commencent le 20/10, trois semaines avant la mise à jour du 10/11, installée aussi sur les postes de Nantes qui fonctionnent.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { evenement: ntp_injoignable_debut }
+  dc_nantes_ok:
+    description: DC-NTE-01 est synchronisé sur DC-PAR-01 (écart 0,3 s) ; son avertissement W32Time de fin octobre est résolu.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { action: machine.heure.lire, cible: DC-NTE-01 }
+
+fausses_pistes:
+  mise_a_jour_windows:
+    description: La mise à jour cumulative du 10 novembre.
+    pourquoi_credible: L'utilisateur fait le lien, et les symptômes ont commencé à peu près à ce moment-là.
+    eliminee_par: [mise_a_jour_hors_cause]
+    actions_inutiles:
+      - { action: machine.logiciel.installer, cible: PC-NTE-0042 }
+    penalite: -5
+  compte:
+    description: Un problème de compte ou de mot de passe (Outlook redemande le mot de passe).
+    pourquoi_credible: Les demandes de mot de passe orientent vers le compte.
+    eliminee_par: [compte_ok]
+    actions_inutiles:
+      - { action: [ad.utilisateur.reinitialiser_mdp, ad.utilisateur.deverrouiller], cible: amercier }
+    penalite: -10
+  dc_de_nantes:
+    description: L'heure du contrôleur de Nantes (avertissement W32Time 129 dans son journal).
+    pourquoi_credible: Un DC mal synchronisé décale tout le site.
+    eliminee_par: [dc_nantes_ok]
+    actions_inutiles:
+      - { action: [machine.heure.resynchroniser, machine.service.redemarrer], cible: DC-NTE-01 }
+    penalite: -10
+
+pieges:
+  heure_reglee_a_la_main:
+    description: Corriger l'heure à la main (Set-Date, Paramètres) sans changer la source de temps.
+    declencheur: { action: machine.heure.definir_manuellement, cible: PC-NTE-0042 }
+    penalite: -10
+    effets:
+      - definir: { chemin: postes.PC-NTE-0042.horloge.decalage, valeur: 0s }
+    retour: >
+      L'accès revient, mais la source reste time.windows.com, injoignable :
+      le poste recommence à dériver et repassera les 5 minutes dans trois
+      semaines. Il faut remettre la synchronisation sur le domaine.
+  sortie_du_domaine:
+    description: Sortir le poste du domaine et le rejoindre.
+    declencheur: { action: [machine.domaine.quitter, machine.domaine.joindre], cible: PC-NTE-0042 }
+    penalite: -10
+    retour: Avec 7 minutes d'écart, le rejoint échoue lui aussi (Kerberos), et le poste se retrouve hors domaine.
+  cloture_source_manuelle:
+    description: Clôturer avec la source de temps toujours manuelle.
+    declencheur:
+      action: ticket.cloturer
+      cible: INC0031790
+      si: [{ chemin: postes.PC-NTE-0042.horloge.type, egal: NTP }]
+    penalite: -10
+    retour: La cause (source de temps manuelle) reste en place.
+
+actions_dangereuses:
+  tolerance_kerberos:
+    description: Augmenter la tolérance d'horloge Kerberos du domaine (« Tolérance maximale pour la synchronisation de l'horloge de l'ordinateur »).
+    declencheur:
+      action: ad.domaine.strategie_mdp.modifier
+      cible: vellane.local
+      parametres: { propriete: [tolerance_horloge, MaxClockSkew] }
+    penalite: -35
+    gravite: majeure
+    retour: >
+      Élargir la fenêtre de 5 minutes affaiblit la protection contre le rejeu
+      pour tout le domaine, pour masquer le défaut d'un seul poste.
+  heure_du_dc:
+    description: Modifier l'heure ou la source de temps d'un contrôleur de domaine pour l'aligner sur le poste.
+    declencheur:
+      action: [machine.heure.definir_manuellement, machine.heure.configurer]
+      cible: [DC-NTE-01, DC-PAR-01, DC-PAR-02, DC-LYO-01]
+    penalite: -40
+    gravite: critique
+    retour: Décaler un DC casse Kerberos pour tous les postes qui s'y authentifient.
+
+resolution:
+  conditions:
+    - { chemin: postes.PC-NTE-0042.horloge.type, egal: NT5DS }
+    - { chemin: postes.PC-NTE-0042.horloge.decalage, abs_inf: 2s }
+    - { chemin: domaines.vellane.local.kerberos.tolerance_horloge, egal: 5m }
+  etapes:
+    config_domaine:
+      description: Synchronisation remise sur la hiérarchie du domaine (w32tm /config /syncfromflags:domhier /update, redémarrage du service).
+      points: 10
+      valide_par:
+        - si: [{ chemin: postes.PC-NTE-0042.horloge.type, egal: NT5DS }]
+    resynchronisation:
+      description: Poste resynchronisé (écart inférieur à 2 secondes, source DC-NTE-01).
+      points: 8
+      valide_par:
+        - si:
+            - { chemin: postes.PC-NTE-0042.horloge.type, egal: NT5DS }
+            - { chemin: postes.PC-NTE-0042.horloge.decalage, abs_inf: 2s }
+    tickets_purges:
+      description: Tickets Kerberos renouvelés (klist purge ou fermeture de session) après la resynchronisation.
+      points: 6
+      valide_par:
+        - action: machine.kerberos.purger
+          cible: PC-NTE-0042
+          si: [{ chemin: postes.PC-NTE-0042.horloge.decalage, abs_inf: 2s }]
+        - action: ticket.demander_action_utilisateur
+          cible: INC0031790
+          parametres: { action: fermer_session }
+          si: [{ chemin: postes.PC-NTE-0042.horloge.decalage, abs_inf: 2s }]
+    verification:
+      description: "Accès au lecteur S: et à l'intranet confirmé par l'utilisateur."
+      points: 6
+      valide_par:
+        - action: ticket.demander_action_utilisateur
+          cible: INC0031790
+          parametres: { action: ouvrir_lecteur }
+          si: [{ chemin: postes.PC-NTE-0042.horloge.decalage, abs_inf: 5m }]
+
+communication:
+  cloture:
+    ticket: INC0031790
+    elements:
+      cause:
+        description: Cause (horloge du poste en avance de plus de 5 minutes, Kerberos refusé).
+        mots_cles: [heure, horloge, décalage, 7 minutes, Kerberos]
+        points: 5
+      action:
+        description: Actions (synchronisation remise sur le domaine, resynchronisation, tickets renouvelés).
+        mots_cles: [w32tm, synchronis, domhier, domaine, klist]
+        points: 5
+      prevention:
+        description: "Prévention (signaler que l'installation de TempoPointe modifie la source de temps : référent applicatif ou packaging)."
+        mots_cles: [TempoPointe, badges, installation, packaging, éditeur]
+        points: 5
+
+escalade:
+  equipes: [N2-Systemes]
+  delai_cible: 10m
+  indices_attendus:
+    N1: [decalage_mesure, erreur_horloge, compte_ok, installation_tempopointe]
+  note:
+    elements:
+      symptome:
+        description: Symptômes (Outlook, lecteur S:, intranet).
+        mots_cles: [Outlook, mot de passe, 'S:', intranet, accès refusé]
+        points: 6
+      perimetre:
+        description: Un seul poste, le compte marche ailleurs.
+        mots_cles: [un seul poste, autre poste, accueil, compte fonctionne]
+        points: 6
+      heure:
+        description: Écart d'heure constaté.
+        mots_cles: [heure, 7 minutes, en avance, décalage, horloge]
+        points: 10
+      journaux:
+        description: Événement relevé (40960, 0xc0000133).
+        mots_cles: [40960, 0xc0000133, date]
+        points: 4
+      contexte:
+        description: Logiciel de badges installé le 20/10, mise à jour du 10/11.
+        mots_cles: [TempoPointe, badge, mise à jour]
+        points: 4
+
+debrief:
+  - Au-delà de 5 minutes d'écart avec le DC, Kerberos échoue ; les messages parlent de mot de passe ou d'accès refusé, rarement d'heure.
+  - LsaSrv 40960 (0xc0000133) côté poste et 4771 code 0x25 côté DC désignent le décalage.
+  - Un poste membre du domaine se synchronise sur la hiérarchie du domaine (NT5DS) ; une source manuelle est une anomalie à expliquer.
+  - La date d'apparition d'un défaut se lit dans les journaux, pas dans le souvenir de l'utilisateur.
+  - On n'aligne jamais un DC ni la tolérance du domaine sur un poste fautif.

@@ -1,0 +1,433 @@
+schema: scenario/1
+id: N3-15
+titre: Service web interne inaccessible pour tout le monde, certificat expiré
+niveau: N3
+temps_cible: 40m
+environnement: vellane
+horloge: 2026-11-26T08:20:00+01:00
+competences: [certificats, iis, tls, pki, hsts, multi_tickets]
+
+resume: >
+  Depuis 6 h, l'intranet, les notes de frais et l'API de Vellane Ventes sont
+  inaccessibles partout (NET::ERR_CERT_DATE_INVALID, pas de contournement à
+  cause de HSTS). Le certificat lié aux trois sites IIS a expiré ce matin.
+  Piège : un certificat renouvelé, valide jusqu'en 2028, est bien dans le
+  magasin depuis six semaines (inscription automatique), mais les liaisons
+  pointent toujours vers l'ancien, archivé et invisible par défaut. Fausses
+  pistes : les mises à jour installées cette nuit sur le serveur, une alerte
+  de publication de CRL sur l'autorité.
+cause_racine: >
+  Liaisons HTTPS d'Intranet, NotesDeFrais et API sur SRV-WEB-01 liées à
+  l'empreinte 5D27C0A9..., échu le 26/11 à 06:00. L'inscription automatique a
+  émis le 15/10 le certificat 9A4E1C7B..., mais IIS ne relie pas tout seul :
+  la nouvelle liaison automatique (Certificate Rebind) n'est pas activée.
+
+tickets:
+  ALR-7781:
+    ouvert: -2h15m
+    demandeur: Supervision
+    canal: supervision
+    priorite: P2
+    objet: "Sonde HTTPS intranet.vellane.local : certificat expiré"
+    description: |
+      Sonde HTTPS-INTRANET en état CRITIQUE depuis 06:00:31.
+      Certificat présenté : CN=intranet.vellane.local, émis par Vellane CA
+      Emission 01, valide jusqu'au 26/11/2026 06:00:00. Expiré.
+  INC0032201:
+    ouvert: -18m
+    demandeur: lbernard
+    poste: PC-PAR-0187
+    canal: portail
+    priorite: P2
+    objet: Intranet inaccessible
+    description: |
+      L'intranet affiche « Votre connexion n'est pas privée » et il n'y a pas
+      de bouton pour continuer.
+    reponses:
+      message_exact: "« Votre connexion n'est pas privée. NET::ERR_CERT_DATE_INVALID. Vous ne pouvez pas visiter intranet.vellane.local pour l'instant, car le site web utilise HSTS. »"
+      collegues: Tout le service a le même message.
+      par_defaut: Je ne sais pas.
+    retours:
+      ouvrir_url: &retour_intranet
+        - si: [{ chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'Intranet', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }]
+          message: L'intranet s'affiche normalement.
+        - message: Toujours « Votre connexion n'est pas privée ».
+  INC0032203:
+    ouvert: -13m
+    demandeur: ebonnet
+    poste: PC-LYO-0118
+    canal: portail
+    priorite: P3
+    objet: Notes de frais impossibles à saisir
+    description: Le site des notes de frais affiche une erreur de sécurité, impossible de continuer.
+    reponses:
+      par_defaut: C'est pareil pour mes collègues de Lyon.
+  INC0032205:
+    ouvert: -9m
+    demandeur: vbrun
+    poste: PC-LYO-0151
+    canal: telephone
+    priorite: P2
+    objet: Vellane Ventes ne synchronise plus
+    description: |
+      À la synchronisation, Vellane Ventes affiche une erreur de connexion
+      sécurisée. Je ne peux plus envoyer mes commandes.
+    reponses:
+      message_exact: "« La connexion sous-jacente a été fermée : Impossible d'établir une relation de confiance pour le canal sécurisé SSL/TLS (https://api.vellane.local/v7/sync). »"
+      depuis_quand: La synchro de 5 h 30 est passée, celle de 7 h a échoué.
+      par_defaut: Je ne sais pas.
+    retours:
+      lancer_application:
+        - si: [{ chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'API', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }]
+          message: La synchronisation est passée, mes commandes sont parties.
+        - message: Même erreur de canal sécurisé.
+  INC0032206:
+    ouvert: -7m
+    demandeur: cmartin
+    poste: PC-PAR-0142
+    canal: portail
+    priorite: P3
+    objet: L'intranet ne s'ouvre plus
+    description: L'intranet ne s'ouvre plus, message d'erreur de sécurité.
+    reponses:
+      par_defaut: Je ne sais pas.
+    retours:
+      ouvrir_url: *retour_intranet
+  INC0032208:
+    ouvert: -4m
+    demandeur: amercier
+    poste: PC-NTE-0042
+    canal: portail
+    priorite: P4
+    objet: Comment changer mon mot de passe ?
+    description: Windows me prévient que mon mot de passe expire dans 3 jours. Comment le changer ?
+    reponses:
+      par_defaut: C'est juste une question.
+
+monde:
+  serveurs:
+    SRV-WEB-01:
+      demarrage: -5h
+      certificats:
+        5D27C0A9E1B4F38D62A0C7E519B3D48F0E6A2C71:
+          sujet: CN=intranet.vellane.local
+          san: [intranet.vellane.local, notesdefrais.vellane.local, api.vellane.local]
+          emetteur: Vellane CA Emission 01
+          modele: Serveur Web Vellane
+          debut: 2024-11-26T06:00:00+01:00
+          fin: 2026-11-26T06:00:00+01:00
+          cle_privee: true
+          archive: true
+        9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40:
+          debut: -42j
+          fin: +688j
+      iis:
+        sites:
+          Intranet:
+            liaisons:
+              - { protocole: https, port: 443, nom_hote: intranet.vellane.local, certificat: 5D27C0A9E1B4F38D62A0C7E519B3D48F0E6A2C71, sni: true }
+              - { protocole: http, port: 80, nom_hote: intranet.vellane.local, redirection: https }
+          NotesDeFrais:
+            liaisons:
+              - { protocole: https, port: 443, nom_hote: notesdefrais.vellane.local, certificat: 5D27C0A9E1B4F38D62A0C7E519B3D48F0E6A2C71, sni: true }
+          API:
+            liaisons:
+              - { protocole: https, port: 443, nom_hote: api.vellane.local, certificat: 5D27C0A9E1B4F38D62A0C7E519B3D48F0E6A2C71, sni: true }
+        reliure_auto_certificat: false
+      fichiers:
+        'C:\inetpub\logs\LogFiles\W3SVC3\u_ex261126.log':
+          taille: 2.1Mo
+          modifie: -1m
+          contenu: |
+            #Fields: date time s-sitename cs-method cs-uri-stem s-port c-ip cs(User-Agent) sc-status time-taken
+            2026-11-26 04:30:02 W3SVC3 POST /v7/sync 443 10.20.10.91 VellaneVentes/7.3 200 412
+            2026-11-26 04:30:05 W3SVC3 POST /v7/sync 443 10.30.10.61 VellaneVentes/7.3 200 388
+            (dernière requête reçue : 04:59:58 UTC ; aucune requête depuis, les clients rejettent la poignée de main TLS)
+      journaux:
+        - evenement: windowsupdate/19
+          ref: maj_serveur
+          t: -5h08m
+          donnees: { mise_a_jour: "2026-11 Mise à jour cumulative pour Microsoft Server Operating System version 21H2 pour les systèmes x64 (KB5068851)" }
+        - evenement: autoenrollment/64
+          ref: alerte_64
+          t: -7j
+          repeter: { intervalle: 1j, jusqu_a: -1j }
+          donnees: { empreinte: 5d 27 c0 a9 e1 b4 f3 8d 62 a0 c7 e5 19 b3 d4 8f 0e 6a 2c 71 }
+        - evenement: schannel/36887
+          ref: alerte_tls_45
+          t: -2h19m55s
+          repeter: { intervalle: 20s, jusqu_a: -10s }
+          donnees: { code: "45" }
+        - evenement: schannel/36887
+          t: -3j
+          repeter: { nombre: 3, intervalle: 7h }
+          donnees: { code: "46" }
+    SRV-PKI-01:
+      journaux:
+        - evenement: certsvc/74
+          ref: crl_ldap
+          t: -10h20m
+          repeter: { intervalle: 1h, jusqu_a: -20m }
+          donnees: { cle: "0", emplacement: "ldap:///CN=Vellane CA Emission 01,CN=SRV-PKI-01,CN=CDP,CN=Public Key Services,CN=Services,CN=Configuration,DC=vellane,DC=local", erreur: "Le serveur n’est pas opérationnel. 0x8007203a" }
+  changements:
+    CHG0004722:
+      titre: Mises à jour mensuelles des serveurs de Paris (vague 2)
+      date: -5h30m
+      auteur: bmarchand
+      contenu: Installation de la mise à jour cumulative de novembre et redémarrage de SRV-WEB-01, SRV-APP-01, SRV-FIC-02 entre 02 h 30 et 03 h 30. Tests de fonctionnement OK à 03 h 25.
+
+indices:
+  erreur_date:
+    description: "Depuis un poste : NET::ERR_CERT_DATE_INVALID ; le certificat présenté (5D27...) a expiré à 06:00 ; HSTS interdit le contournement."
+    categorie: diagnostic
+    points: 5
+    revele_par:
+      - { action: web.ouvrir, parametres: { url: [https://intranet.vellane.local, https://notesdefrais.vellane.local, https://api.vellane.local] } }
+      - { question: message_exact, ticket: INC0032201 }
+  liaison_ancien_certificat:
+    description: La liaison HTTPS d'Intranet pointe vers l'empreinte 5D27C0A9..., échue.
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: iis.liaisons.lire, cible: SRV-WEB-01/Intranet }
+  nouveau_certificat_present:
+    description: Le magasin contient 9A4E1C7B..., même nom et mêmes SAN, valide jusqu'en 2028, émis le 15/10 ; l'ancien n'apparaît qu'avec les certificats archivés.
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: machine.certificats.lire, cible: SRV-WEB-01 }
+  alerte_64:
+    description: AutoEnrollment 64 annonçait chaque jour depuis une semaine l'expiration de 5D27... .
+    categorie: diagnostic
+    points: 3
+    revele_par:
+      - { evenement: alerte_64 }
+  alerte_supervision:
+    description: La sonde a signalé l'expiration à 06:00:31 (ALR-7781).
+    categorie: diagnostic
+    points: 3
+    revele_par:
+      - { action: ticket.lire, cible: ALR-7781 }
+  lien_tickets:
+    description: L'alerte et les quatre tickets intranet, notes de frais et Vellane Ventes ont la même cause ; la question de mot de passe n'en fait pas partie.
+    categorie: correlation
+    points: 7
+    revele_par:
+      - action: ticket.lier
+        parametres:
+          tickets:
+            inclut: [ALR-7781, INC0032201, INC0032203, INC0032205, INC0032206]
+            exclut: [INC0032208]
+  trois_sites:
+    description: Les sites NotesDeFrais et API utilisent la même liaison au même certificat ; les trois sont à corriger.
+    categorie: correlation
+    points: 4
+    revele_par:
+      - { action: iis.liaisons.lire, cible: [SRV-WEB-01/NotesDeFrais, SRV-WEB-01/API] }
+  meme_cause_appli:
+    description: L'erreur de canal sécurisé de Vellane Ventes vise https://api.vellane.local, servi par le même certificat.
+    categorie: correlation
+    points: 4
+    revele_par:
+      - { question: message_exact, ticket: INC0032205 }
+  pas_la_mise_a_jour:
+    description: Le serveur a redémarré à 03:12 et les sites ont servi jusqu'à 05:59 ; les alertes TLS (36887, code 45 = certificate_expired) commencent à 06:00:05.
+    categorie: elimination
+    points: 4
+    revele_par:
+      - { evenement: alerte_tls_45 }
+      - { action: machine.fichiers.lire, cible: SRV-WEB-01, parametres: { chemin: 'C:\inetpub\logs\LogFiles\W3SVC3\u_ex261126.log' } }
+  crl_valide:
+    description: La CRL de base et la CRL delta publiées en HTTP sont valides ; l'échec de publication LDAP ne touche pas les clients, et l'erreur est une erreur de date, pas de révocation.
+    categorie: elimination
+    points: 3
+    revele_par:
+      - { action: pki.ca.lire, cible: SRV-PKI-01 }
+  iis_demarre:
+    description: W3SVC et les pools d'applications tournent ; IIS n'est pas arrêté.
+    categorie: elimination
+    points: 3
+    revele_par:
+      - { action: machine.services.lire, cible: SRV-WEB-01 }
+
+fausses_pistes:
+  mises_a_jour_de_la_nuit:
+    description: Les mises à jour installées cette nuit sur SRV-WEB-01 (CHG0004722).
+    pourquoi_credible: Le serveur a été mis à jour et redémarré quelques heures avant la panne.
+    eliminee_par: [pas_la_mise_a_jour]
+    actions_inutiles:
+      - { action: machine.redemarrer, cible: SRV-WEB-01, si: [{ indice: liaison_ancien_certificat, revele: false }] }
+    penalite: -10
+  crl:
+    description: L'autorité signale un échec de publication de CRL (CertificationAuthority 74).
+    pourquoi_credible: Une CRL inaccessible fait aussi échouer TLS.
+    eliminee_par: [crl_valide]
+    actions_inutiles:
+      - { action: machine.service.redemarrer, cible: SRV-PKI-01 }
+    penalite: -10
+  iis_plante:
+    description: IIS ou un pool d'applications serait arrêté.
+    pourquoi_credible: Les trois sites sont inaccessibles en même temps.
+    eliminee_par: [iis_demarre]
+    actions_inutiles:
+      - { action: iis.site.redemarrer, si: [{ indice: liaison_ancien_certificat, revele: false }] }
+    penalite: -5
+
+pieges:
+  suppression_de_l_ancien_avant_reliure:
+    description: Supprimer le certificat échu du magasin alors qu'il est encore lié.
+    declencheur:
+      action: machine.certificat.supprimer
+      cible: SRV-WEB-01
+      parametres: { empreinte: 5D27C0A9E1B4F38D62A0C7E519B3D48F0E6A2C71 }
+      si: [{ chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'Intranet', 'liaisons', 0, 'certificat'], egal: 5D27C0A9E1B4F38D62A0C7E519B3D48F0E6A2C71 }]
+    penalite: -15
+    effets:
+      - evenement: { machine: SRV-WEB-01, evenement: httpevent/15021, donnees: { point: "intranet.vellane.local:443" } }
+    retour: >
+      Le site ne présente plus aucun certificat : les clients passent d'une
+      erreur de date à une connexion réinitialisée (HttpEvent 15021). On relie
+      d'abord, on nettoie ensuite.
+  demande_d_un_certificat_inutile:
+    description: Demander un nouveau certificat alors qu'un certificat renouvelé valide est déjà dans le magasin.
+    declencheur: { action: pki.certificat.demander, cible: SRV-WEB-01 }
+    penalite: -10
+    retour: Un troisième certificat ajoute de la confusion ; celui de l'inscription automatique est valide, avec les bons SAN.
+  ticket_hors_sujet_lie:
+    description: Rattacher la question de mot de passe à l'incident.
+    declencheur: { action: ticket.lier, parametres: { tickets: { inclut: [INC0032208] } } }
+    penalite: -10
+    retour: Le ticket est arrivé pendant l'incident mais n'a rien à voir ; il se traite à part.
+  reliure_partielle:
+    description: Clôturer après avoir relié l'intranet seulement.
+    declencheur:
+      action: ticket.cloturer
+      si:
+        - { chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'API', 'liaisons', 0, 'certificat'], egal: 5D27C0A9E1B4F38D62A0C7E519B3D48F0E6A2C71 }
+    penalite: -15
+    retour: Les notes de frais et l'API de Vellane Ventes restent en panne ; toutes les liaisons du certificat échu sont à refaire.
+
+actions_dangereuses:
+  certificat_auto_signe:
+    description: Créer et lier un certificat auto-signé.
+    declencheur: { action: pki.certificat.autosigne, cible: SRV-WEB-01 }
+    penalite: -40
+    gravite: majeure
+    retour: Aucun client ne lui fait confiance (HSTS sans contournement, API en erreur) et cela banalise les certificats non fiables.
+  contournement_navigateurs:
+    description: Déployer une GPO qui autorise à ignorer les erreurs de certificat ou désactive HSTS.
+    declencheur:
+      action: gpo.modifier
+      parametres: { parametre: [Ignorer les erreurs de certificat, SSLErrorOverrideAllowed, Désactiver HSTS, HSTSPolicyBypassList] }
+    penalite: -50
+    gravite: critique
+    retour: Apprendre aux navigateurs du parc à ignorer les erreurs de certificat ouvre la voie à l'interception de tout le trafic.
+  renouvellement_de_l_ac:
+    description: Renouveler le certificat de l'autorité de certification.
+    declencheur: { action: pki.ca.renouveler }
+    penalite: -60
+    gravite: critique
+    fin_scenario: true
+    retour: L'autorité est valide jusqu'en 2031 ; la renouveler en urgence change la chaîne de tout le parc et ne règle rien.
+  revocation_du_nouveau:
+    description: Révoquer le certificat renouvelé.
+    declencheur: { action: pki.certificat.revoquer }
+    penalite: -40
+    gravite: majeure
+    retour: Il ne resterait aucun certificat valide pour les trois sites.
+
+resolution:
+  conditions:
+    - { chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'Intranet', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }
+    - { chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'NotesDeFrais', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }
+    - { chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'API', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }
+  etapes:
+    liaisons_mises_a_jour:
+      description: Les trois liaisons HTTPS reliées au certificat 9A4E1C7B... .
+      points: 12
+      valide_par:
+        - si:
+            - { chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'Intranet', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }
+            - { chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'NotesDeFrais', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }
+            - { chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'API', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }
+    verification_navigateur:
+      description: Intranet vérifié depuis un poste après la reliure.
+      points: 5
+      valide_par:
+        - action: web.ouvrir
+          parametres: { url: https://intranet.vellane.local }
+          si: [{ chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'Intranet', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }]
+    verification_application:
+      description: Synchronisation de Vellane Ventes testée avec l'utilisateur.
+      points: 4
+      valide_par:
+        - action: ticket.demander_action_utilisateur
+          cible: INC0032205
+          parametres: { action: lancer_application }
+          si: [{ chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'API', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }]
+    reliure_automatique:
+      description: Nouvelle liaison automatique des certificats renouvelés activée sur SRV-WEB-01.
+      points: 4
+      valide_par:
+        - si: [{ chemin: serveurs.SRV-WEB-01.iis.reliure_auto_certificat, egal: true }]
+
+communication:
+  cloture:
+    ticket: ALR-7781
+    elements:
+      cause:
+        description: Cause (liaisons IIS restées sur le certificat échu, alors que le renouvelé était disponible).
+        mots_cles: [certificat, expiré, liaison, IIS, 06:00]
+        points: 4
+      action:
+        description: Action (trois liaisons reliées au certificat renouvelé, vérifications).
+        mots_cles: [relié, nouveau certificat, 9A4E, liaison, trois sites]
+        points: 3
+      prevention:
+        description: Prévention (reliure automatique, alertes 64 et sonde à traiter, suivi des expirations).
+        mots_cles: [reliure automatique, Certificate Rebind, supervision, alerte, expiration]
+        points: 4
+  actions:
+    communication_generale:
+      description: Message à tous les utilisateurs (rétablissement, recharger la page).
+      points: 4
+      valide_par:
+        - action: ticket.communiquer
+          si: [{ chemin: ['serveurs', 'SRV-WEB-01', 'iis', 'sites', 'Intranet', 'liaisons', 0, 'certificat'], egal: 9A4E1C7B2F0D83E65A17C4B9D02F6E31A8C57B40 }]
+
+escalade:
+  equipes: [N3-Infrastructure]
+  delai_cible: 10m
+  indices_attendus:
+    N1: [erreur_date, lien_tickets, alerte_supervision, meme_cause_appli]
+    N2: [erreur_date, lien_tickets, alerte_supervision, meme_cause_appli, liaison_ancien_certificat, nouveau_certificat_present, alerte_64, trois_sites, crl_valide, iis_demarre]
+  note:
+    elements:
+      perimetre:
+        description: Tous les utilisateurs, trois services (intranet, notes de frais, Vellane Ventes).
+        mots_cles: [tous, intranet, notes de frais, Vellane Ventes, api]
+        points: 6
+      erreur:
+        description: Erreur de date de certificat, depuis 6 h.
+        mots_cles: [certificat, expiré, ERR_CERT_DATE_INVALID, 06:00, 6 h]
+        points: 8
+      liaison:
+        description: Certificat renouvelé présent, liaison restée sur l'ancien.
+        mots_cles: [liaison, IIS, empreinte, 9A4E, renouvelé]
+        points: 8
+      supervision:
+        description: Alerte de la sonde.
+        mots_cles: [ALR-7781, sonde, supervision]
+        points: 4
+      elimination:
+        description: Mises à jour de la nuit et CRL hors de cause.
+        mots_cles: [mise à jour, CRL, révocation]
+        points: 4
+
+debrief:
+  - NET::ERR_CERT_DATE_INVALID et l'alerte TLS 45 (certificate_expired) désignent la date du certificat présenté, pas la PKI.
+  - Le certificat qui compte est celui de la liaison, pas celui qu'on voit dans le magasin ; l'ancien, archivé, est masqué par défaut.
+  - Un certificat renouvelé par inscription automatique ne remplace pas seul la liaison IIS sans la reliure automatique.
+  - Une même empreinte peut servir plusieurs sites ; chercher toutes ses liaisons.
+  - Relier d'abord, nettoyer ensuite.
+  - Une alerte ignorée (64, sonde) est le vrai point de départ de l'incident.

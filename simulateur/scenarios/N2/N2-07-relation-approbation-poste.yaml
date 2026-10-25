@@ -1,0 +1,390 @@
+schema: scenario/1
+id: N2-07
+titre: "« La relation d'approbation entre cette station de travail et le domaine principal a échoué »"
+niveau: N2
+temps_cible: 25m
+environnement: vellane
+horloge: 2026-11-09T08:35:00+01:00
+competences: [canal_securise, compte_ordinateur, laps, bitlocker, processus_nettoyage]
+
+resume: >
+  Julie Roux revient de six mois de congé maternité. Son portable, éteint
+  depuis mai, affiche l'erreur de relation d'approbation. Le canal sécurisé
+  est cassé non pas par un mot de passe machine désynchronisé, mais parce que
+  le script mensuel de nettoyage a désactivé le compte ordinateur et l'a
+  déplacé dans OU=Postes,OU=Desactives. Il sera supprimé, avec sa clé
+  BitLocker, le 1er décembre. Réactiver, replacer dans l'OU d'origine,
+  redémarrer ; puis l'utilisatrice changera son mot de passe expiré.
+cause_racine: >
+  NettoyageAD.ps1 (1er du mois, compte svc-nettoyage) a désactivé
+  PC-PAR-0175 le 01/09/2026 (dernière connexion le 07/05) et l'a déplacé dans
+  OU=Postes,OU=Desactives. Le mot de passe machine est resté identique des
+  deux côtés : le compte désactivé suffit à refuser le canal sécurisé.
+
+tickets:
+  INC0031420:
+    ouvert: -4m
+    demandeur: jroux
+    poste: PC-PAR-0175
+    canal: telephone
+    priorite: P3
+    objet: Erreur de relation d'approbation au démarrage
+    description: |
+      Bonjour, je reprends le travail aujourd'hui. Quand je me connecte sur mon
+      portable, j'ai le message « La relation d'approbation entre cette
+      station de travail et le domaine principal a échoué ». Je vous appelle
+      de mon portable personnel.
+    reponses:
+      depuis_quand: Ce matin, c'est la première fois que je rallume le PC depuis mon départ.
+      changement_recent: Je rentre de congé maternité, j'étais absente depuis début mai. Le portable est resté éteint dans mon caisson tout ce temps.
+      message_exact: "« La relation d’approbation entre cette station de travail et le domaine principal a échoué. »"
+      deja_essaye: J'ai redémarré deux fois. En coupant le Wi-Fi, j'arrive à ouvrir ma session, mais je n'ai ni mes mails ni mes lecteurs.
+      autre_poste: Je n'ai pas essayé sur un autre PC.
+      collegues: Mes collègues des RH n'ont pas de problème.
+      localisation: Au siège, 2e étage, sur le réseau filaire.
+      materiel: PC-PAR-0175, un portable.
+      autorisation: Oui, vous pouvez redémarrer, je n'ai rien d'ouvert.
+      par_defaut: Je ne sais pas, je viens d'arriver.
+    verification_identite:
+      matricule: V01175
+    retours:
+      reessayer_connexion:
+        - si: [{ chemin: postes.PC-PAR-0175.canal_securise.etat, egal: ok }, { chemin: utilisateurs.jroux.mdp.version, egal: 10 }]
+          message: Ça avance ! Windows me dit maintenant que mon mot de passe a expiré et qu'il faut le changer.
+        - si: [{ chemin: postes.PC-PAR-0175.canal_securise.etat, egal: ok }]
+          message: La session s'ouvre normalement.
+          effets:
+            - definir: { chemin: postes.PC-PAR-0175.sessions.jroux, valeur: { etat: active, ouverte: 0s } }
+        - message: Toujours le message de relation d'approbation.
+      changer_mot_de_passe:
+        - si: [{ chemin: postes.PC-PAR-0175.canal_securise.etat, egal: ok }]
+          message: Nouveau mot de passe accepté, je suis connectée, j'ai mes lecteurs. Merci !
+          effets:
+            - definir: { chemin: utilisateurs.jroux.mdp.version, valeur: 11 }
+            - definir: { chemin: utilisateurs.jroux.mdp.dernier_changement, valeur: 0s }
+            - definir: { chemin: postes.PC-PAR-0175.sessions.jroux, valeur: { etat: active, ouverte: 0s, mdp_version: 11 } }
+        - message: Je ne peux même pas arriver jusqu'au changement de mot de passe, j'ai l'erreur avant.
+
+monde:
+  utilisateurs:
+    jroux:
+      mdp: { dernier_changement: -203j, version: 10 }
+      derniere_connexion: { DC-PAR-02: -186j }
+      description: "Absence longue du 11/05/2026 au 08/11/2026 (exclue du nettoyage)"
+      attributs: { extensionAttribute5: ABSENCE_LONGUE }
+  postes:
+    PC-PAR-0175:
+      ou: OU=Postes,OU=Desactives
+      description: "Désactivé par NettoyageAD le 01/09/2026 - inactif depuis le 07/05/2026 - OU d'origine : OU=Portables,OU=Postes,OU=Paris"
+      compte_ad: { active: false, mdp_version: 23, mdp_dernier_changement: -205j, derniere_connexion: -186j }
+      mdp_machine_local: 23
+      acces_distant: false
+      demarrage: -9m
+      ecran: "La relation d’approbation entre cette station de travail et le domaine principal a échoué."
+      sessions: {}
+      horloge: { decalage: +2m41s, type: NT5DS, source: Local CMOS Clock, derniere_synchro: -186j }
+      dns: { inscription: echec }
+      bitlocker: { actif: true, cles_dans_ad: 1 }
+      laps: { derniere_rotation: -190j }
+      journaux:
+        - evenement: netlogon/3210
+          ref: netlogon_3210
+          t: -8m
+          donnees: { dc: DC-PAR-02 }
+        - evenement: netlogon/5719
+          t: -8m
+          donnees: { domaine: VELLANE, raison: Accès refusé. }
+        - evenement: netlogon/3210
+          t: -3m
+          donnees: { dc: DC-PAR-02 }
+        - evenement: w32time/36
+          ref: w32time_36
+          t: -7m
+          donnees: { secondes: "86400" }
+  controleurs:
+    DC-PAR-02:
+      journaux:
+        - evenement: netlogon/5805
+          ref: netlogon_5805
+          t: -8m
+          repeter: { nombre: 2, intervalle: 5m }
+          donnees: { ordinateur: PC-PAR-0175, raison: Accès refusé. }
+        - evenement: securite/4768
+          ref: tgt_refuse
+          t: -8m
+          niveau: Échec de l'audit
+          donnees: { compte: PC-PAR-0175$, ip_client: 10.10.6.17, port: 49720, code: "0x12" }
+  serveurs:
+    SRV-DEPLOI-01:
+      fichiers:
+        'D:\Scripts\NettoyageAD\NettoyageAD.ps1': { taille: 14Ko, modifie: -310j }
+        'D:\Scripts\NettoyageAD\Logs\2026-09-01.log':
+          taille: 6Ko
+          modifie: -69j
+          contenu: |
+            01/09/2026 03:00:12 Début - seuil d'inactivité 90 jours, suppression après 90 jours de désactivation
+            01/09/2026 03:00:14 PC-LYO-0031 ; dernière connexion 12/05/2026 ; désactivé ; déplacé vers OU=Postes,OU=Desactives
+            01/09/2026 03:00:14 PC-PAR-0175 ; dernière connexion 07/05/2026 ; désactivé ; déplacé vers OU=Postes,OU=Desactives ; OU d'origine OU=Portables,OU=Postes,OU=Paris
+            01/09/2026 03:00:15 Utilisateurs : 3 comptes exclus (ABSENCE_LONGUE)
+            01/09/2026 03:00:16 Fin - 7 postes désactivés, 0 supprimé
+        'D:\Scripts\NettoyageAD\Logs\2026-11-01.log':
+          taille: 4Ko
+          modifie: -8j
+          contenu: |
+            01/11/2026 03:00:11 Début
+            01/11/2026 03:00:13 PC-PAR-0175 ; désactivé depuis 61 jours ; suppression prévue au passage du 01/12/2026
+            01/11/2026 03:00:15 Fin - 2 postes désactivés, 4 supprimés
+  documents:
+    KB-0215:
+      titre: Script de nettoyage des comptes inactifs (NettoyageAD)
+      niveau: N2
+      contenu: >
+        Le 1er de chaque mois, NettoyageAD.ps1 (SRV-DEPLOI-01, compte
+        svc-nettoyage) désactive les postes sans connexion depuis 90 jours, les
+        déplace dans OU=Postes,OU=Desactives et note l'OU d'origine dans la
+        description. Il les supprime après 90 jours de désactivation. Les
+        comptes utilisateurs marqués ABSENCE_LONGUE sont exclus, pas les
+        postes. Réactiver un poste : réactiver le compte, le replacer dans son
+        OU d'origine, nettoyer la description, redémarrer le poste (le mot de
+        passe machine n'a pas changé). Ne jamais supprimer puis recréer le
+        compte : ses clés de récupération BitLocker seraient perdues.
+
+indices:
+  canal_casse:
+    description: Test-ComputerSecureChannel renvoie False ; nltest /sc_verify renvoie ERROR_ACCESS_DENIED.
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: machine.canal_securise.tester, cible: PC-PAR-0175 }
+  evenements_netlogon:
+    description: NETLOGON 3210 et 5719 (accès refusé) sur le poste, 5805 et 4768 en échec (0x12, compte révoqué) sur DC-PAR-02.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { evenement: netlogon_3210 }
+      - { evenement: netlogon_5805 }
+      - { evenement: tgt_refuse }
+  compte_desactive:
+    description: Compte ordinateur désactivé, dans OU=Postes,OU=Desactives, description du script avec l'OU d'origine (OU=Portables,OU=Postes,OU=Paris).
+    categorie: diagnostic
+    points: 10
+    revele_par:
+      - { action: ad.ordinateur.lire, cible: PC-PAR-0175 }
+  script_nettoyage:
+    description: La procédure de réactivation est connue (KB-0215, journal du script) ; la suppression du compte est prévue le 01/12.
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: document.consulter, cible: KB-0215 }
+      - { action: machine.fichiers.lire, cible: SRV-DEPLOI-01, parametres: { chemin: 'D:\Scripts\NettoyageAD\Logs\2026-11-01.log' } }
+      - { action: machine.fichiers.lire, cible: SRV-DEPLOI-01, parametres: { chemin: 'D:\Scripts\NettoyageAD\Logs\2026-09-01.log' } }
+  retour_conge:
+    description: Le portable est resté éteint six mois (retour de congé maternité).
+    categorie: diagnostic
+    points: 2
+    revele_par:
+      - { question: changement_recent, ticket: INC0031420 }
+      - { question: depuis_quand, ticket: INC0031420 }
+  mdp_utilisateur_expire:
+    description: Le mot de passe de l'utilisatrice a expiré pendant son absence (203 jours) ; son compte, exclu du nettoyage, est actif.
+    categorie: diagnostic
+    points: 2
+    revele_par:
+      - { action: ad.utilisateur.lire, cible: jroux }
+  pas_de_doublon:
+    description: Aucun autre poste n'utilise le nom PC-PAR-0175 (un seul bail DHCP, à l'adresse MAC du portable).
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { action: dhcp.baux.lire, cible: SRV-DHCP-01 }
+  decalage_faible:
+    description: Le poste dérive de 2 min 41 s, sous la tolérance Kerberos de 5 minutes.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { action: machine.heure.lire, cible: PC-PAR-0175 }
+      - { action: machine.heure.afficher, cible: PC-PAR-0175 }
+  dns_explique:
+    description: L'absence d'enregistrement DNS vient du vieillissement de la zone et de l'inscription sécurisée refusée ; le poste localise bien DC-PAR-02.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { action: ad.dc.localiser, cible: PC-PAR-0175 }
+      - { action: dns.zone.lire, cible: vellane.local }
+
+fausses_pistes:
+  homonyme:
+    description: Le message NETLOGON 3210 évoque « un autre ordinateur présent sur le même réseau utilisant le même nom ».
+    pourquoi_credible: C'est écrit en toutes lettres dans l'événement.
+    eliminee_par: [pas_de_doublon]
+    actions_inutiles:
+      - { action: ad.ordinateur.reinitialiser, cible: PC-PAR-0175 }
+    penalite: -5
+  decalage_horaire:
+    description: Après six mois éteint, l'heure n'est plus synchronisée (W32Time 36).
+    pourquoi_credible: Un décalage horaire casse Kerberos.
+    eliminee_par: [decalage_faible]
+    actions_inutiles:
+      - { action: [machine.heure.definir_manuellement, machine.heure.configurer], cible: PC-PAR-0175 }
+    penalite: -5
+  dns:
+    description: nslookup PC-PAR-0175 répond « nom inexistant ».
+    pourquoi_credible: Un problème DNS empêche souvent de joindre le domaine.
+    eliminee_par: [dns_explique]
+    actions_inutiles:
+      - { action: dns.enregistrement.ajouter, cible: vellane.local, parametres: { nom: PC-PAR-0175 } }
+    penalite: -5
+
+pieges:
+  reparation_aveugle:
+    description: Lancer Test-ComputerSecureChannel -Repair alors que le compte est désactivé.
+    declencheur:
+      action: machine.canal_securise.reparer
+      cible: PC-PAR-0175
+      si: [{ chemin: postes.PC-PAR-0175.compte_ad.active, egal: false }]
+    penalite: -5
+    effets:
+      - definir: { chemin: postes.PC-PAR-0175.compte_ad.mdp_version, valeur: 24 }
+      - definir: { chemin: postes.PC-PAR-0175.mdp_machine_local, valeur: 24 }
+    retour: >
+      La réparation réinitialise le mot de passe machine et « réussit », mais
+      le canal reste refusé : le compte est désactivé. Regarder le compte
+      ordinateur dans l'annuaire avant de réparer côté poste.
+  sortie_du_domaine:
+    description: Sortir le poste du domaine pour le rejoindre.
+    declencheur: { action: machine.domaine.quitter, cible: PC-PAR-0175 }
+    penalite: -10
+    retour: >
+      Sortir et rejoindre le domaine est la manœuvre lourde par réflexe : il
+      faut un compte local, le rejoint réutilise le compte de l'OU des
+      désactivés, et en cas d'échec l'utilisatrice n'a plus rien. Ici, une
+      réactivation suffisait.
+  reinitialisation_compte:
+    description: Réinitialiser le compte ordinateur dans l'annuaire.
+    declencheur: { action: ad.ordinateur.reinitialiser, cible: PC-PAR-0175 }
+    penalite: -10
+    effets:
+      - definir: { chemin: postes.PC-PAR-0175.compte_ad.mdp_version, valeur: 0 }
+    retour: Réinitialiser le compte casse le mot de passe machine pour de bon ; le poste devra rejoindre le domaine.
+  laisse_dans_desactives:
+    description: Clôturer avec le poste encore dans OU=Postes,OU=Desactives.
+    declencheur:
+      action: ticket.cloturer
+      cible: INC0031420
+      si: [{ chemin: postes.PC-PAR-0175.ou, egal: 'OU=Postes,OU=Desactives' }]
+    penalite: -15
+    retour: >
+      Dans cette OU, le poste ne reçoit plus les GPO de sécurité (BitLocker,
+      LAPS) et le script le supprimera le 1er décembre avec sa clé de
+      récupération.
+
+actions_dangereuses:
+  suppression_compte:
+    description: Supprimer le compte ordinateur (pour le recréer au rejoint).
+    declencheur: { action: ad.ordinateur.supprimer, cible: PC-PAR-0175 }
+    penalite: -35
+    gravite: majeure
+    effets:
+      - definir: { chemin: postes.PC-PAR-0175.bitlocker.cles_dans_ad, valeur: 0 }
+      - definir: { chemin: postes.PC-PAR-0175.compte_ad.existe, valeur: false }
+    retour: >
+      La suppression emporte la clé de récupération BitLocker et le mot de
+      passe LAPS stockés sur l'objet, ainsi que ses groupes. Au prochain
+      incident matériel, le disque est irrécupérable.
+  admin_local:
+    description: Donner les droits d'administrateur local à l'utilisatrice ou lui créer un compte local pour qu'elle travaille.
+    declencheur: { action: machine.admin_local.ajouter, cible: PC-PAR-0175 }
+    penalite: -25
+    gravite: majeure
+    retour: Contournement contraire à la politique de sécurité, qui ne règle rien.
+  script_modifie:
+    description: Modifier, désactiver ou supprimer le script de nettoyage.
+    declencheur:
+      action: [machine.fichiers.modifier, machine.fichiers.supprimer]
+      cible: SRV-DEPLOI-01
+      parametres: { chemin: 'D:\Scripts\NettoyageAD\NettoyageAD.ps1' }
+    penalite: -30
+    gravite: majeure
+    retour: Le script applique une règle de sécurité validée. Une évolution (exclure les postes des absences longues) se propose, elle ne se fait pas en incident.
+
+resolution:
+  conditions:
+    - { chemin: postes.PC-PAR-0175.compte_ad.active, egal: true }
+    - { chemin: postes.PC-PAR-0175.ou, egal: 'OU=Portables,OU=Postes,OU=Paris' }
+    - { chemin: postes.PC-PAR-0175.canal_securise.etat, egal: ok }
+    - { chemin: postes.PC-PAR-0175.bitlocker.cles_dans_ad, egal: 1 }
+  etapes:
+    reactivation:
+      description: Compte ordinateur réactivé.
+      points: 10
+      valide_par:
+        - si: [{ chemin: postes.PC-PAR-0175.compte_ad.active, egal: true }]
+    ou_restauree:
+      description: Compte replacé dans OU=Portables,OU=Postes,OU=Paris.
+      points: 8
+      valide_par:
+        - si: [{ chemin: postes.PC-PAR-0175.ou, egal: 'OU=Portables,OU=Postes,OU=Paris' }]
+    redemarrage:
+      description: Poste redémarré après la réactivation ; canal sécurisé rétabli.
+      points: 6
+      valide_par:
+        - si: [{ chemin: postes.PC-PAR-0175.canal_securise.etat, egal: ok }]
+    session_utilisatrice:
+      description: L'utilisatrice a changé son mot de passe expiré et ouvert sa session.
+      points: 6
+      valide_par:
+        - si:
+            - { chemin: postes.PC-PAR-0175.sessions.jroux.etat, egal: active }
+            - { chemin: utilisateurs.jroux.mdp.version, sup: 10 }
+
+communication:
+  cloture:
+    ticket: INC0031420
+    elements:
+      cause:
+        description: Cause (compte ordinateur désactivé par le script de nettoyage après six mois d'inactivité).
+        mots_cles: [désactivé, NettoyageAD, script, nettoyage, inactif]
+        points: 5
+      action:
+        description: Actions (réactivation, retour dans l'OU d'origine, redémarrage).
+        mots_cles: [réactiv, OU d'origine, Portables, redémarr]
+        points: 5
+      suite:
+        description: Suite (mot de passe changé ; proposer d'étendre l'exclusion ABSENCE_LONGUE aux postes ou un circuit RH avant les retours).
+        mots_cles: [mot de passe, ABSENCE_LONGUE, absence longue, RH, exclusion]
+        points: 5
+
+escalade:
+  equipes: [N2-Systemes]
+  delai_cible: 10m
+  indices_attendus:
+    N1: [compte_desactive, retour_conge, mdp_utilisateur_expire]
+  note:
+    elements:
+      symptome:
+        description: Message exact de relation d'approbation.
+        mots_cles: [relation d'approbation]
+        points: 6
+      poste:
+        description: Poste concerné.
+        mots_cles: [PC-PAR-0175]
+        points: 6
+      cause:
+        description: Compte ordinateur désactivé et déplacé par le script.
+        mots_cles: [désactivé, Desactives, NettoyageAD, script]
+        points: 10
+      contexte:
+        description: Poste éteint six mois.
+        mots_cles: [congé, éteint, depuis mai, six mois, 6 mois]
+        points: 4
+      mot_de_passe:
+        description: Mot de passe de l'utilisatrice expiré, à changer ensuite.
+        mots_cles: [mot de passe expiré, expiré]
+        points: 4
+
+debrief:
+  - Le message de relation d'approbation dit seulement que le canal sécurisé est refusé ; la cause se lit côté annuaire (compte absent, désactivé, mot de passe machine désynchronisé).
+  - Regarder le compte ordinateur avant de réparer ou de sortir le poste du domaine.
+  - Supprimer un compte ordinateur emporte ses clés BitLocker et son mot de passe LAPS.
+  - Une remise en service se termine dans la bonne OU, sinon le poste est privé de ses GPO et sera supprimé par le script.
+  - Le texte d'un événement (« même nom sur le réseau ») propose des pistes ; il ne donne pas la cause.

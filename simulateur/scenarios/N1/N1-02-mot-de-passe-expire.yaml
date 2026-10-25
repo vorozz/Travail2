@@ -1,0 +1,236 @@
+schema: scenario/1
+id: N1-02
+titre: Mot de passe expiré, l'utilisateur ne peut plus ouvrir de session
+niveau: N1
+temps_cible: 10m
+environnement: vellane
+horloge: 2026-11-03T09:10:00+01:00
+competences: [expiration_mot_de_passe, strategie_mot_de_passe, pso, verification_identite]
+
+resume: >
+  Thomas Moreau, DAF adjoint, doit changer son mot de passe expiré à
+  l'ouverture de session, mais chaque nouveau mot de passe est refusé. Son
+  compte relève d'une stratégie renforcée (PSO : 14 caractères, 60 jours)
+  et non de la stratégie du domaine (12 caractères, 90 jours).
+cause_racine: >
+  Mot de passe changé il y a 61 jours, au-delà des 60 jours de
+  PSO_Comptes_Sensibles (groupe GG_PSO_Sensibles). Les mots de passe proposés
+  font 12 caractères : conformes à la stratégie du domaine, refusés par la
+  PSO, qui en impose 14.
+
+tickets:
+  INC0031188:
+    ouvert: -4m
+    demandeur: tmoreau
+    poste: PC-PAR-0105
+    canal: telephone
+    priorite: P2
+    objet: Mot de passe refusé, impossible de me connecter
+    description: |
+      Windows me demande de changer mon mot de passe. J'ai essayé deux mots de
+      passe de 12 caractères avec majuscule, chiffre et symbole, comme
+      d'habitude : refusés tous les deux. J'ai un comité de direction à
+      10 heures et j'ai besoin de mon PC. Thomas Moreau (j'appelle de mon
+      portable).
+    reponses:
+      depuis_quand: Ce matin, à la première connexion.
+      message_exact: "« Impossible de mettre à jour le mot de passe. La valeur fournie pour le nouveau mot de passe ne correspond pas aux exigences de longueur, de complexité ou d'historique du domaine. »"
+      changement_recent: Je change de mot de passe quand Windows me le demande, la dernière fois c'était début septembre je crois.
+      deja_essaye: "Deux mots de passe de 12 caractères, du genre « Vellane2026! ». Et je me suis trompé une fois dans l'ancien."
+      autre_poste: Non, juste mon portable.
+      localisation: Je suis à mon bureau au 5e, sur le réseau.
+      impact: Je dois présenter les chiffres au comité dans 50 minutes.
+      materiel: Mon portable, PC-PAR-0105.
+      par_defaut: Je n'en sais rien, c'est votre métier !
+    verification_identite:
+      matricule: V00105
+      manager: bmarchand
+    retours:
+      changer_mot_de_passe:
+        - si: [{ indice: pso_14 }]
+          message: "J'ai mis une phrase de 16 caractères... C'est accepté, la session s'ouvre. Merci !"
+          effets:
+            - definir: { chemin: utilisateurs.tmoreau.mdp.version, valeur: 16 }
+            - definir: { chemin: utilisateurs.tmoreau.mdp.dernier_changement, valeur: 0s }
+            - definir: { chemin: utilisateurs.tmoreau.mdp.changer_a_la_connexion, valeur: false }
+            - definir: { chemin: postes.PC-PAR-0105.sessions.tmoreau, valeur: { etat: active, ouverte: 0s, mdp_version: 16 } }
+        - message: "Refusé encore ! J'ai mis 12 caractères avec une majuscule, un chiffre et un point d'exclamation. Je ne comprends pas."
+          effets:
+            - evenement: { machine: DC-PAR-01, evenement: securite/4723, donnees: { compte: tmoreau } }
+      reessayer_connexion:
+        - si: [{ chemin: utilisateurs.tmoreau.mdp.changer_a_la_connexion, egal: false }, { chemin: utilisateurs.tmoreau.mdp.version, sup: 15 }]
+          message: C'est bon, je suis connecté.
+          effets:
+            - definir: { chemin: postes.PC-PAR-0105.sessions.tmoreau, valeur: { etat: active, ouverte: 0s } }
+        - message: Windows me redemande de changer mon mot de passe.
+
+monde:
+  utilisateurs:
+    tmoreau:
+      mdp: { dernier_changement: -61j, version: 15 }
+      mauvais_mdp:
+        DC-PAR-02: { compteur: 1, dernier: -9m }
+        DC-PAR-01: { compteur: 1, dernier: -9m }
+  postes:
+    PC-PAR-0105:
+      ecran: "Le mot de passe de l’utilisateur doit être modifié avant la connexion."
+      sessions: {}
+  controleurs:
+    DC-PAR-02:
+      journaux:
+        - evenement: securite/4771
+          t: -11m
+          donnees: { compte: tmoreau, ip_client: 10.10.5.105, port: 61022, code: "0x17" }
+        - evenement: securite/4771
+          t: -9m
+          donnees: { compte: tmoreau, ip_client: 10.10.5.105, port: 61040, code: "0x18" }
+    DC-PAR-01:
+      journaux:
+        - evenement: securite/4723
+          t: -7m
+          donnees: { compte: tmoreau }
+        - evenement: securite/4723
+          t: -5m
+          donnees: { compte: tmoreau }
+
+indices:
+  identite_verifiee:
+    description: Identité vérifiée (rappel au poste 4105, matricule ou manager).
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { action: ticket.verifier_identite, cible: INC0031188 }
+  mdp_expire:
+    description: Compte activé, non verrouillé (1 erreur), mot de passe expiré (PasswordExpired = True, dernier changement il y a 61 jours).
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: ad.utilisateur.lire, cible: tmoreau }
+  message_refus:
+    description: Le refus porte sur la longueur, la complexité ou l'historique, pas sur l'ancien mot de passe.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { question: message_exact, ticket: INC0031188 }
+  membre_pso:
+    description: Le compte est membre de GG_PSO_Sensibles.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { action: ad.utilisateur.groupes.lire, cible: tmoreau }
+  pso_14:
+    description: "Stratégie résultante : PSO_Comptes_Sensibles, 14 caractères minimum, expiration à 60 jours, 24 mots de passe d'historique."
+    categorie: diagnostic
+    points: 10
+    revele_par:
+      - { action: ad.utilisateur.strategie_mdp.lire, cible: tmoreau }
+
+pieges:
+  regle_du_domaine:
+    description: Faire réessayer l'utilisateur en lui donnant la règle du domaine (12 caractères) sans avoir vérifié sa stratégie résultante.
+    declencheur:
+      action: ticket.demander_action_utilisateur
+      cible: INC0031188
+      parametres: { action: changer_mot_de_passe }
+      si: [{ indice: pso_14, revele: false }]
+    penalite: -5
+    retour: >
+      La stratégie du domaine n'est pas forcément celle du compte. Une PSO
+      (stratégie de mot de passe affinée) s'applique aux membres de
+      GG_PSO_Sensibles : Get-ADUserResultantPasswordPolicy donne la règle
+      réelle. Sans elle, l'utilisateur échoue une troisième fois.
+  reinitialisation_sans_verification:
+    description: Réinitialiser le mot de passe d'un compte sensible sans avoir vérifié l'identité de l'appelant.
+    declencheur:
+      action: ad.utilisateur.reinitialiser_mdp
+      cible: tmoreau
+      si: [{ indice: identite_verifiee, revele: false }]
+    penalite: -10
+    retour: >
+      Un appel urgent d'un dirigeant qui demande un nouveau mot de passe est
+      le scénario type de la fraude au président. Rappel au numéro de
+      l'annuaire avant toute réinitialisation.
+  mdp_provisoire_permanent:
+    description: Réinitialiser sans imposer le changement à la prochaine ouverture de session.
+    declencheur:
+      action: ad.utilisateur.reinitialiser_mdp
+      cible: tmoreau
+      parametres: { changer_a_la_connexion: false }
+    penalite: -10
+    retour: >
+      Le technicien connaît alors le mot de passe du compte. Un mot de passe
+      provisoire impose toujours un changement à la connexion. Ici, guider
+      l'utilisateur vers un mot de passe conforme évitait toute
+      réinitialisation.
+
+actions_dangereuses:
+  mdp_n_expire_jamais:
+    description: Cocher « Le mot de passe n'expire jamais » sur le compte.
+    declencheur:
+      action: ad.utilisateur.modifier
+      cible: tmoreau
+      parametres: { propriete: PasswordNeverExpires, valeur: true }
+    penalite: -20
+    gravite: majeure
+    retour: >
+      Contourner l'expiration sur le compte d'un dirigeant est une faille de
+      sécurité (et une non-conformité à l'audit). Ce réglage est réservé à
+      certains comptes de service, sur validation de la sécurité.
+  sortie_du_groupe_pso:
+    description: Retirer le compte de GG_PSO_Sensibles pour qu'il retombe sur la stratégie du domaine.
+    declencheur:
+      action: ad.groupe.retirer_membre
+      cible: GG_PSO_Sensibles
+      parametres: { membre: tmoreau }
+    penalite: -25
+    gravite: majeure
+    retour: >
+      Affaiblir la protection d'un compte sensible pour résoudre un problème
+      d'utilisateur n'est jamais acceptable. L'appartenance aux groupes de
+      sécurité relève de l'équipe sécurité.
+
+resolution:
+  conditions:
+    - { chemin: utilisateurs.tmoreau.mdp.version, sup: 15 }
+    - { chemin: utilisateurs.tmoreau.mdp.expire_jamais, egal: false }
+    - { chemin: utilisateurs.tmoreau.groupes, contient: GG_PSO_Sensibles }
+  etapes:
+    nouveau_mdp:
+      description: Mot de passe conforme à la PSO défini par l'utilisateur (ou provisoire avec changement imposé, puis changé).
+      points: 30
+      valide_par:
+        - si:
+            - { chemin: utilisateurs.tmoreau.mdp.version, sup: 15 }
+            - { chemin: utilisateurs.tmoreau.mdp.changer_a_la_connexion, egal: false }
+    session_ouverte:
+      description: L'utilisateur a ouvert sa session.
+      points: 10
+      valide_par:
+        - si: [{ chemin: postes.PC-PAR-0105.sessions.tmoreau.etat, egal: active }]
+
+communication:
+  cloture:
+    ticket: INC0031188
+    elements:
+      cause:
+        description: Cause expliquée (mot de passe expiré au bout de 60 jours).
+        mots_cles: [expir, 60 jours, soixante]
+        points: 5
+      regle:
+        description: Règle propre au compte rappelée (14 caractères).
+        mots_cles: [14 caract, quatorze, PSO, stratégie renforcée]
+        points: 5
+      conseil:
+        description: Conseil pour la prochaine fois (phrase de passe, rappel avant expiration, pas de variante d'un ancien mot de passe).
+        mots_cles: [phrase de passe, historique, ancien mot de passe, rappel, notification]
+        points: 5
+
+escalade:
+  equipes: []
+
+debrief:
+  - La stratégie de mot de passe d'un compte peut différer de celle du domaine (PSO) ; la stratégie résultante fait foi.
+  - Avec une PSO à 60 jours, un mot de passe changé il y a 61 jours est expiré même si la stratégie du domaine dit 90.
+  - Le message de refus (longueur, complexité, historique) oriente vers la règle et non vers l'ancien mot de passe.
+  - Guider l'utilisateur vaut mieux qu'une réinitialisation ; si réinitialisation, identité vérifiée et changement imposé.
+  - L'urgence affichée d'un dirigeant ne dispense d'aucune vérification.

@@ -1,0 +1,332 @@
+schema: scenario/1
+id: N2-06
+titre: GPO non appliquée, poste dans la mauvaise OU et filtrage de sécurité
+niveau: N2
+temps_cible: 25m
+environnement: vellane
+horloge: 2026-11-09T09:15:00+01:00
+competences: [gpo, ou, filtrage_de_securite, jeton_ordinateur, gpresult]
+
+resume: >
+  Hugo Lambert (comptabilité, Paris) a reçu vendredi un poste recyclé de
+  Lyon. Compteo Web ne fonctionne pas dans Edge et il voit les copieurs de
+  Lyon. Deux causes à traiter dans l'ordre : le compte ordinateur est resté
+  dans l'OU des postes de Lyon, et une fois déplacé, la GPO du mode IE reste
+  filtrée tant que le poste n'est pas membre de GG_Postes_Compta, puis
+  redémarré.
+cause_racine: >
+  PC-PAR-0298 (ex PC-LYO-0087) a été renommé sans être déplacé : il est dans
+  OU=Postes,OU=Lyon, où GPO_C_Compta_ModeIE (liée à OU=Postes,OU=Paris) ne
+  s'applique pas et où GPO_C_Lyon_Imprimantes ajoute les copieurs de Lyon.
+  La GPO est en outre filtrée sur GG_Postes_Compta, dont le poste n'est pas
+  membre. L'appartenance d'un ordinateur à un groupe n'est prise en compte
+  qu'au redémarrage.
+
+tickets:
+  INC0031415:
+    ouvert: -17m
+    demandeur: hlambert
+    poste: PC-PAR-0298
+    canal: portail
+    priorite: P3
+    objet: Compteo Web inutilisable sur mon nouveau PC
+    description: |
+      Bonjour, j'ai reçu mon PC vendredi. Dans Compteo Web, les écrans de
+      saisie restent blancs et les boutons ne répondent pas, alors que chez
+      mes collègues tout marche. En plus, dans la liste des imprimantes, je
+      n'ai que des copieurs de Lyon (LYO-RDC, LYO-1E).
+    reponses:
+      depuis_quand: Depuis vendredi, je n'avais pas Compteo avant sur le poste de dépannage.
+      changement_recent: C'est un PC qui vient de Lyon, m'a dit le technicien. Il a juste changé le nom.
+      autre_poste: Vendredi matin, sur le PC de Nadia avec mon compte, Compteo Web marchait très bien.
+      collegues: Nadia et Claire n'ont aucun problème avec Compteo Web.
+      deja_essaye: J'ai redémarré ce matin et vidé le cache d'Edge.
+      message_exact: Pas de message. Il manque juste la petite icône « e » d'Internet Explorer dans la barre d'adresse, que Nadia a.
+      materiel: PC-PAR-0298, l'étiquette dit aussi PC-LYO-0087, barré.
+      par_defaut: Je ne sais pas.
+    retours:
+      ouvrir_url:
+        - si: [{ chemin: postes.PC-PAR-0298.gpo_appliquees, contient: GPO_C_Compta_ModeIE }]
+          message: Compteo Web s'ouvre avec l'icône Internet Explorer, les écrans de saisie fonctionnent !
+        - message: Toujours les écrans blancs dans Compteo Web.
+      redemarrer_poste:
+        - si: [{ chemin: postes.PC-PAR-0298.gpo_appliquees, contient: GPO_C_Compta_ModeIE }]
+          message: J'ai redémarré. J'ai maintenant les copieurs de Paris, et Compteo Web marche.
+        - si: [{ chemin: postes.PC-PAR-0298.ou, egal: 'OU=Standard,OU=Postes,OU=Paris' }]
+          message: J'ai redémarré. J'ai bien les copieurs de Paris maintenant, mais Compteo Web reste blanc.
+        - message: J'ai redémarré, rien n'a changé.
+
+monde:
+  utilisateurs:
+    hlambert: { poste: PC-PAR-0298 }
+  postes:
+    PC-PAR-0298:
+      site: Paris-Siege
+      ou: OU=Postes,OU=Lyon
+      description: Ex PC-LYO-0087 - réaffecté à la comptabilité de Paris le 05/11 - K. Leroy
+      socle: W11-23H2-v2025.03
+      utilisateur_principal: hlambert
+      reseau: { ip: 10.10.6.98/22, mac: 02-56-4C-20-00-87 }
+      demarrage: -1h12m
+      sessions:
+        hlambert: { etat: active, ouverte: -1h05m }
+      journaux:
+        - evenement: grouppolicy/1500
+          t: -1h11m
+        - evenement: dcom/10016
+          t: -1h10m
+          donnees: { clsid: "{2593F8B9-4EAF-457C-B68A-50F6B8EA6B54}", appid: "{15C20B67-12E7-4BB6-92BB-7AFF07997402}", sid: S-1-5-21-3021597742-1873450312-2264317895-5298, compte: VELLANE\hlambert }
+  changements:
+    CHG0004571:
+      titre: Réaffectation du poste PC-LYO-0087 à la comptabilité de Paris
+      date: -3j
+      auteur: kleroy
+      contenu: >
+        Renommage PC-LYO-0087 en PC-PAR-0298, expédition au siège. Étapes de
+        la procédure KB-0210 restant à faire par le siège : OU de destination,
+        groupes de ciblage.
+
+indices:
+  gpo_absente:
+    description: "gpresult (ordinateur) : GPO_C_Compta_ModeIE n'apparaît ni parmi les GPO appliquées ni parmi les GPO filtrées ; GPO_C_Lyon_Imprimantes est appliquée."
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - action: machine.gpresult
+        cible: PC-PAR-0298
+        si: [{ chemin: postes.PC-PAR-0298.ou, egal: 'OU=Postes,OU=Lyon' }]
+  mauvaise_ou:
+    description: Le compte ordinateur est dans OU=Postes,OU=Lyon (description « Ex PC-LYO-0087 »).
+    categorie: diagnostic
+    points: 8
+    revele_par:
+      - { action: ad.ordinateur.lire, cible: PC-PAR-0298 }
+  gpo_cible:
+    description: GPO_C_Compta_ModeIE est liée à OU=Postes,OU=Paris et filtrée sur GG_Postes_Compta (lecture pour les utilisateurs authentifiés).
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: gpo.lire, cible: GPO_C_Compta_ModeIE }
+      - { action: gpo.permissions.lire, cible: GPO_C_Compta_ModeIE }
+  pas_dans_groupe:
+    description: PC-PAR-0298 n'est pas membre de GG_Postes_Compta (PC-PAR-0142 et PC-PAR-0151 le sont).
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: ad.ordinateur.lire, cible: PC-PAR-0298 }
+      - { action: ad.groupe.lire, cible: GG_Postes_Compta }
+  filtrage_refuse:
+    description: "Après le déplacement, gpresult indique GPO_C_Compta_ModeIE « Refusé (Sécurité) »."
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - action: machine.gpresult
+        cible: PC-PAR-0298
+        si:
+          - { chemin: postes.PC-PAR-0298.ou, egal: 'OU=Standard,OU=Postes,OU=Paris' }
+          - { chemin: postes.PC-PAR-0298.jeton_ordinateur, ne_contient_pas: GG_Postes_Compta }
+  win10_hors_sujet:
+    description: GPO_C_Win10_Heritage, refusée par son filtre WMI, ne contient que d'anciens réglages Windows 10, rien sur Edge.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { action: gpo.lire, cible: GPO_C_Win10_Heritage }
+  compte_ok:
+    description: Le compte de l'utilisateur fonctionne avec Compteo Web sur un autre poste de la compta ; le réglage est côté ordinateur.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { question: autre_poste, ticket: INC0031415 }
+  replication_saine:
+    description: La réplication AD et SYSVOL est saine ; la GPO est identique sur tous les DC.
+    categorie: elimination
+    points: 5
+    revele_par:
+      - { action: ad.replication.lire }
+      - { action: ad.dc.diagnostiquer }
+
+fausses_pistes:
+  filtre_wmi:
+    description: Après le déplacement, gpresult montre aussi GPO_C_Win10_Heritage « Refusé (filtre WMI) ».
+    pourquoi_credible: Deux GPO refusées s'affichent ; on peut s'attaquer à la mauvaise.
+    eliminee_par: [win10_hors_sujet]
+    actions_inutiles:
+      - { action: [gpo.modifier, gpo.permissions.modifier, gpo.lien.modifier], cible: GPO_C_Win10_Heritage }
+    penalite: -5
+  compte_utilisateur:
+    description: L'utilisateur pense que son compte « n'a pas les droits ».
+    pourquoi_credible: Compte récent, poste de dépannage jusqu'à vendredi.
+    eliminee_par: [compte_ok]
+    actions_inutiles:
+      - { action: ad.utilisateur.copier_groupes, cible: hlambert }
+      - { action: ad.utilisateur.reinitialiser_mdp, cible: hlambert }
+    penalite: -5
+  replication_gpo:
+    description: La GPO ne serait pas répliquée sur le DC du poste.
+    pourquoi_credible: Explication classique d'une GPO qui « ne descend pas ».
+    eliminee_par: [replication_saine]
+    actions_inutiles:
+      - { action: ad.replication.forcer }
+    penalite: -5
+
+pieges:
+  utilisateur_dans_groupe_ordinateurs:
+    description: Ajouter l'utilisateur hlambert à GG_Postes_Compta au lieu du poste.
+    declencheur:
+      action: ad.groupe.ajouter_membre
+      cible: GG_Postes_Compta
+      parametres: { membre: hlambert }
+    penalite: -5
+    retour: >
+      Le mode IE est un paramètre ordinateur : le filtrage porte sur le compte
+      ordinateur. Un utilisateur dans ce groupe n'y change rien.
+  mauvaise_ou_destination:
+    description: Déplacer le poste ailleurs que dans une OU de postes de Paris (Serveurs, Computers, Salles de réunion, Désactivés).
+    declencheur:
+      action: ad.ordinateur.deplacer
+      cible: PC-PAR-0298
+      parametres: { ou: ['OU=Serveurs,OU=Paris', CN=Computers, 'OU=SallesReunion,OU=Postes,OU=Paris', 'OU=Postes,OU=Desactives', OU=Paris] }
+    penalite: -5
+    retour: La KB-0210 donne l'OU cible d'un poste fixe de Paris (OU=Standard,OU=Postes,OU=Paris).
+  cloture_prematuree:
+    description: Clôturer alors que la GPO n'est pas appliquée (par exemple après un simple gpupdate).
+    declencheur:
+      action: ticket.cloturer
+      cible: INC0031415
+      si: [{ chemin: postes.PC-PAR-0298.gpo_appliquees, ne_contient_pas: GPO_C_Compta_ModeIE }]
+    penalite: -10
+    retour: >
+      gpupdate relit les GPO mais pas les groupes de l'ordinateur : le jeton
+      du compte ordinateur date du démarrage. Sans redémarrage, le filtrage
+      reste refusé.
+
+actions_dangereuses:
+  filtrage_ouvert:
+    description: Donner « Appliquer » aux Utilisateurs authentifiés sur GPO_C_Compta_ModeIE.
+    declencheur:
+      action: gpo.permissions.modifier
+      cible: GPO_C_Compta_ModeIE
+      parametres: { compte: Utilisateurs authentifiés, droit: GpoApply }
+    penalite: -30
+    gravite: majeure
+    retour: >
+      La GPO est liée à toutes les OU de postes de Paris : elle s'appliquerait
+      aux 900 postes du siège au lieu des postes de la comptabilité.
+  lien_racine:
+    description: Lier GPO_C_Compta_ModeIE à la racine du domaine ou à une OU de site entière autre que Paris.
+    declencheur:
+      action: gpo.lien.modifier
+      cible: GPO_C_Compta_ModeIE
+      parametres: { operation: [ajouter, appliquer], ou: ["", OU=Lyon, 'OU=Postes,OU=Lyon', OU=Nantes] }
+    penalite: -35
+    gravite: majeure
+    retour: Modifier la portée d'une GPO pour un seul poste touche tout le parc. On corrige la position et les groupes du poste.
+  default_domain_policy:
+    description: Modifier la Default Domain Policy.
+    declencheur: { action: [gpo.modifier, gpo.lien.modifier, gpo.permissions.modifier], cible: Default Domain Policy }
+    penalite: -40
+    gravite: critique
+    retour: La stratégie par défaut du domaine porte les règles de mot de passe et de Kerberos de tout le domaine ; elle ne se touche jamais pour un incident de poste.
+  blocage_heritage:
+    description: Bloquer l'héritage sur une OU de postes.
+    declencheur: { action: gpo.heritage.modifier, parametres: { bloquer: true } }
+    penalite: -30
+    gravite: majeure
+    retour: Bloquer l'héritage coupe aussi GPO_C_Postes_Securite (BitLocker, LAPS, verrouillage d'écran) pour toute l'OU.
+  gpo_en_double:
+    description: Créer une copie de la GPO, non filtrée, pour ce poste.
+    declencheur: { action: gpo.creer }
+    penalite: -25
+    gravite: majeure
+    retour: Une GPO en double, non filtrée, finit appliquée à tout le monde et contredit l'originale au prochain changement.
+
+resolution:
+  conditions:
+    - { chemin: postes.PC-PAR-0298.ou, egal: 'OU=Standard,OU=Postes,OU=Paris' }
+    - { chemin: groupes.GG_Postes_Compta.membres, contient: PC-PAR-0298 }
+    - { chemin: postes.PC-PAR-0298.gpo_appliquees, contient: GPO_C_Compta_ModeIE }
+    - { chemin: gpo.GPO_C_Compta_ModeIE.filtrage.appliquer, egal: [GG_Postes_Compta] }
+  etapes:
+    deplacement:
+      description: Poste déplacé dans OU=Standard,OU=Postes,OU=Paris.
+      points: 10
+      valide_par:
+        - si: [{ chemin: postes.PC-PAR-0298.ou, egal: 'OU=Standard,OU=Postes,OU=Paris' }]
+    ajout_groupe:
+      description: Poste ajouté à GG_Postes_Compta.
+      points: 10
+      valide_par:
+        - si: [{ chemin: groupes.GG_Postes_Compta.membres, contient: PC-PAR-0298 }]
+    redemarrage:
+      description: Poste redémarré après les deux corrections (jeton ordinateur à jour).
+      points: 5
+      valide_par:
+        - action: machine.redemarrer
+          cible: PC-PAR-0298
+          si: &deux_corrections
+            - { chemin: postes.PC-PAR-0298.ou, egal: 'OU=Standard,OU=Postes,OU=Paris' }
+            - { chemin: groupes.GG_Postes_Compta.membres, contient: PC-PAR-0298 }
+        - action: ticket.demander_action_utilisateur
+          cible: INC0031415
+          parametres: { action: redemarrer_poste }
+          si: *deux_corrections
+    verification:
+      description: GPO appliquée et Compteo Web testé avec l'utilisateur.
+      points: 5
+      valide_par:
+        - action: ticket.demander_action_utilisateur
+          cible: INC0031415
+          parametres: { action: ouvrir_url }
+          si: [{ chemin: postes.PC-PAR-0298.gpo_appliquees, contient: GPO_C_Compta_ModeIE }]
+
+communication:
+  cloture:
+    ticket: INC0031415
+    elements:
+      cause:
+        description: Les deux causes (OU de Lyon, filtrage sur GG_Postes_Compta).
+        mots_cles: [OU, Lyon, filtrage, GG_Postes_Compta]
+        points: 5
+      action:
+        description: Actions (déplacement, ajout au groupe, redémarrage).
+        mots_cles: [déplac, ajout, redémarr]
+        points: 5
+      prevention:
+        description: Retour au technicien de Lyon ou rappel de la procédure de réaffectation (KB-0210, CHG0004571).
+        mots_cles: [KB-0210, procédure, réaffectation, CHG0004571, Leroy, kleroy]
+        points: 5
+
+escalade:
+  equipes: [N2-Systemes]
+  delai_cible: 10m
+  indices_attendus:
+    N1: [mauvaise_ou, pas_dans_groupe, compte_ok]
+  note:
+    elements:
+      symptome:
+        description: Symptômes (Compteo Web sans mode IE, copieurs de Lyon).
+        mots_cles: [Compteo, mode IE, Internet Explorer, imprimantes de Lyon, copieurs de Lyon]
+        points: 6
+      poste:
+        description: Poste concerné et son historique.
+        mots_cles: [PC-PAR-0298, PC-LYO-0087]
+        points: 6
+      ou:
+        description: Compte ordinateur resté dans l'OU de Lyon.
+        mots_cles: ['OU=Postes,OU=Lyon', OU de Lyon, mauvaise OU]
+        points: 8
+      groupe:
+        description: Poste absent de GG_Postes_Compta.
+        mots_cles: [GG_Postes_Compta]
+        points: 5
+      compte:
+        description: Le compte fonctionne sur un autre poste.
+        mots_cles: [autre poste, PC de Nadia, compte fonctionne, PC-PAR-0151]
+        points: 5
+
+debrief:
+  - gpresult distingue une GPO hors de portée (absente) d'une GPO filtrée (refusée, avec la raison).
+  - Deux causes peuvent s'empiler ; corriger la première en fait apparaître une seconde.
+  - Le filtrage de sécurité d'une GPO ordinateur porte sur le compte ordinateur, et son appartenance aux groupes date du dernier démarrage.
+  - Parmi plusieurs GPO refusées, seule compte celle qui porte le paramètre attendu.
+  - On ne modifie jamais la portée d'une GPO partagée pour un seul poste.

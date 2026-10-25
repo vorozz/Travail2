@@ -1,0 +1,486 @@
+schema: scenario/1
+id: N3-16
+titre: Application déployée en échec sur un groupe de postes, prérequis manquant visible seulement dans les journaux
+niveau: N3
+temps_cible: 45m
+environnement: vellane
+horloge: 2026-11-30T10:00:00+01:00
+competences: [deploiement, msi, side_by_side, correlation_par_population, socle, risque_de_masse]
+
+resume: >
+  Le déploiement obligatoire de Vellane Ventes 7.4 échoue sur 23 des 61
+  postes commerciaux, avec une échéance vendredi. Le code 1603 ne dit rien ;
+  le journal MSI et l'événement SideBySide 33 nomment le prérequis manquant
+  (Visual C++ 2008 x86), retiré du nouveau socle W11-24H2-v2026.09. Les 23
+  postes en échec sont exactement ceux du nouveau socle. Fausses pistes : deux
+  échecs de téléchargement sur des portables en VPN, une détection antivirus
+  au même moment.
+cause_racine: >
+  La DLL VVReport.dll, inscrite par une action personnalisée du MSI, dépend
+  de Microsoft.VC90.CRT 9.0.30729.6161 (x86). Le socle W11-24H2-v2026.09 ne
+  contient plus les redistribuables Visual C++ 2005 et 2008 (notes de
+  version). L'inscription échoue (erreur 1904, 0x800736B1), l'installation est
+  annulée (1603). L'application n'a pas déclaré ce prérequis en dépendance.
+
+tickets:
+  ALR-7790:
+    ouvert: -3h
+    demandeur: Supervision
+    canal: supervision
+    priorite: P2
+    objet: "DEP-2026-118 : taux d'échec 37 %"
+    description: |
+      Déploiement DEP-2026-118 (Vellane Ventes 7.4, obligatoire, échéance
+      04/12/2026 18:00) : 38 réussites, 23 échecs, 0 en attente sur 61 postes.
+  INC0032301:
+    ouvert: -3j49m
+    demandeur: vbrun
+    poste: PC-LYO-0151
+    canal: portail
+    priorite: P3
+    objet: Vellane Ventes 7.4 en échec dans le Centre logiciel
+    description: |
+      Le Centre logiciel affiche Vellane Ventes 7.4 « Échec » (0x643). J'ai
+      cliqué sur Réessayer, pareil.
+    historique:
+      - { t: -2j23h, auteur: lduval, texte: "Relance depuis le Centre logiciel : nouvel échec 0x643. En attente." }
+    reponses:
+      message_exact: « Échec de l'installation. Code d'erreur 0x643 (1603). »
+      depuis_quand: Depuis jeudi, quand la mise à jour est apparue.
+      changement_recent: J'ai reçu ce portable neuf en octobre.
+      par_defaut: Je ne sais pas.
+    retours:
+      lancer_application:
+        - si: [{ chemin: deploiement.deploiements.DEP-2026-118.etat_par_poste.PC-LYO-0151, egal: succes }]
+          message: J'ai bien la 7.4, la synchronisation fonctionne.
+        - message: J'ai toujours la 7.3.
+  INC0032305:
+    ouvert: -1h20m
+    demandeur: glemaire
+    poste: PC-NTE-0061
+    canal: portail
+    priorite: P3
+    objet: "Vellane Ventes 7.4 : impossible de télécharger le contenu"
+    description: Le Centre logiciel dit qu'il ne peut pas télécharger le contenu de Vellane Ventes 7.4.
+    reponses:
+      localisation: Je suis en clientèle, connectée par le VPN depuis mon portable.
+      changement_recent: Portable neuf reçu fin octobre.
+      par_defaut: Je ne sais pas.
+  INC0032307:
+    ouvert: -45m
+    demandeur: fmorel
+    poste: PC-LYO-0160
+    canal: telephone
+    priorite: P2
+    objet: Mes commerciaux n'ont pas la 7.4
+    description: |
+      Plusieurs de mes commerciaux n'ont toujours pas la 7.4 alors que la 7.3
+      s'arrête lundi prochain. Que faut-il faire ?
+    reponses:
+      impact: Sans la 7.4 lundi, ils ne pourront plus passer de commandes.
+      par_defaut: Je ne sais pas, c'est à vous de me dire.
+
+monde:
+  groupes:
+    GG_Deploy_VentesV7:
+      ou: OU=Groupes
+      etendue: globale
+      description: Cible du déploiement de Vellane Ventes 7.x (postes commerciaux)
+      membres: [PC-LYO-0121, PC-LYO-0140, PC-LYO-0151, PC-NTE-0061]
+      membres_generes:
+        - { nombre: 36, nom: "PC-COM-{n:04}", n_debut: 1, socle: W11-23H2-v2025.03 }
+        - { nombre: 20, nom: "PC-COM-{n:04}", n_debut: 101, socle: W11-24H2-v2026.09 }
+        - { nombre: 1, nom: "PC-COM-{n:04}", n_debut: 201, socle: W11-24H2-v2026.09, vpn: true }
+  deploiement:
+    applications:
+      APP-VENTES-74:
+        nom: Vellane Ventes 7.4
+        editeur: Vellane DSI
+        type: msi
+        commande: 'msiexec.exe /i "VellaneVentes74.msi" /qn /l*v "C:\Windows\Temp\VellaneVentes74_install.log"'
+        contexte: systeme
+        detection: "Code produit {5C1D7A20-3E44-4B8F-9D6A-0A73C1E2F740}"
+        contenu: { taille: 312Mo, version: 3 }
+        dependances: [APP-DOTNET481]
+        prerequis_reels: [Microsoft Visual C++ 2008 Redistributable - x86 9.0.30729.6161, Microsoft .NET Framework 4.8.1]
+      APP-DOTNET481:
+        nom: Microsoft .NET Framework 4.8.1
+        type: exe
+      APP-VCREDIST2008-X86:
+        nom: Microsoft Visual C++ 2008 Redistributable - x86 9.0.30729.6161
+        type: exe
+        detection: "Code produit {9BE518E6-ECC6-35A9-88E4-87755C07200F}"
+        note: Au catalogue pour servir de dépendance aux applications qui l'exigent ; ne pas déployer seul (fin de support éditeur).
+    deploiements:
+      DEP-2026-118:
+        application: APP-VENTES-74
+        cible: GG_Deploy_VentesV7
+        obligatoire: true
+        disponible: -3j22h
+        echeance: +4j8h
+        fenetre: "22:00-05:00"
+        redemarrage: false
+        etat_par_poste:
+          PC-LYO-0121: succes
+          PC-LYO-0140: succes
+          PC-LYO-0151: { etat: echec, code: "0x643" }
+          PC-NTE-0061: { etat: echec, code: "0x87D00607", detail: "Contenu introuvable (VPN, point de distribution non joignable)" }
+        etat_genere:
+          W11-23H2-v2025.03: succes
+          W11-24H2-v2026.09: { etat: echec, code: "0x643" }
+          vpn: { etat: echec, code: "0x87D00607" }
+  postes:
+    PC-LYO-0151:
+      fichiers:
+        'C:\Windows\AgentDeploiement\Logs\Installation.log':
+          taille: 48Ko
+          modifie: -7h46m
+          contenu: |
+            [27/11/2026 02:14:07] Installation de APP-VENTES-74 (Vellane Ventes 7.4), type « MSI - Système »
+            [27/11/2026 02:14:07] Contenu téléchargé, hachage vérifié (version 3, 312 Mo)
+            [27/11/2026 02:14:07] Ligne de commande : msiexec.exe /i "VellaneVentes74.msi" /qn /l*v "C:\Windows\Temp\VellaneVentes74_install.log"
+            [27/11/2026 02:14:52] Code de sortie : 1603
+            [27/11/2026 02:14:52] Le code de sortie 1603 est un échec. Nouvelle tentative à la prochaine fenêtre.
+            [30/11/2026 02:14:11] Installation de APP-VENTES-74 (Vellane Ventes 7.4), type « MSI - Système »
+            [30/11/2026 02:14:55] Code de sortie : 1603
+        'C:\Windows\Temp\VellaneVentes74_install.log':
+          taille: 3.4Mo
+          modifie: -7h45m
+          contenu: |
+            MSI (s) (1C:44) [02:14:49:310]: Executing op: CustomActionSchedule(Action=CA_RegisterReportEngine,ActionType=3090,Source=C:\Program Files (x86)\Vellane\Ventes\VVReport.dll,Target=DllRegisterServer,)
+            CustomAction CA_RegisterReportEngine returned actual error code -2147010895 (note this may not be 100% accurate if translation happened inside sandbox)
+            Erreur 1904. Le module C:\Program Files (x86)\Vellane\Ventes\VVReport.dll n'a pas pu être inscrit. HRESULT -2147010895. Contactez votre personnel de support technique.
+            Action ended 02:14:51: InstallFinalize. Return value 3.
+            MSI (s) (1C:44) [02:14:52:120]: Note: 1: 1708
+            MSI (s) (1C:44) [02:14:52:120]: Produit : Vellane Ventes 7.4 -- L'installation a échoué.
+            MSI (s) (1C:44) [02:14:52:121]: Windows Installer a installé le produit. Nom du produit : Vellane Ventes 7.4. Version du produit : 7.4.0.118. Langue du produit : 1036. Fabricant : Vellane DSI. État de réussite ou d'erreur de l'installation : 1603.
+      journaux:
+        - evenement: sxs/33
+          ref: sxs_vc90
+          t: -7h45m11s
+          donnees: { fichier: 'C:\Program Files (x86)\Vellane\Ventes\VVReport.dll', assembly: 'Microsoft.VC90.CRT,processorArchitecture="x86",publicKeyToken="1fc8b3b9a1e18e3b",type="win32",version="9.0.30729.6161"' }
+        - evenement: msi/11904
+          ref: msi_1904
+          t: -7h45m10s
+          donnees: { produit: Vellane Ventes 7.4, module: 'C:\Program Files (x86)\Vellane\Ventes\VVReport.dll', hresult: "-2147010895" }
+        - evenement: msi/11708
+          t: -7h45m08s
+          donnees: { produit: Vellane Ventes 7.4 }
+        - evenement: msi/1033
+          ref: msi_1603
+          t: -7h45m08s
+          donnees: { produit: Vellane Ventes 7.4, version: 7.4.0.118, fabricant: Vellane DSI, statut: "1603" }
+        - evenement: bouclier/1116
+          ref: antivirus_usb
+          t: -8h10m
+          donnees: { menace: "Trojan:Script/Wacatac.B!ml", fichier: 'E:\Tarifs_2027\maj_tarifs.js', processus: 'C:\Windows\explorer.exe' }
+    PC-LYO-0121:
+      journaux:
+        - evenement: msi/11707
+          ref: succes_23h2
+          t: -3j7h46m
+          donnees: { produit: Vellane Ventes 7.4 }
+        - evenement: msi/1033
+          t: -3j7h46m
+          donnees: { produit: Vellane Ventes 7.4, version: 7.4.0.118, fabricant: Vellane DSI, statut: "0" }
+  documents:
+    NV-SOCLE-2026.09:
+      titre: Notes de version du socle W11-24H2-v2026.09
+      contenu: >
+        Windows 11 24H2. Retrait des redistribuables Microsoft Visual C++ 2005 et
+        2008 (fin de support, recommandation de la sécurité). Les applications
+        qui en ont besoin doivent les déclarer en dépendance de leur
+        déploiement ; ils sont disponibles au catalogue (APP-VCREDIST2008-X86).
+        Déployé sur les postes neufs depuis le 01/10/2026.
+    PKG-VENTES-74:
+      titre: Fiche de packaging - Vellane Ventes 7.4
+      contenu: >
+        MSI, installation en contexte Système. Prérequis déclarés : .NET
+        Framework 4.8.1. Testé sur le socle W11-23H2-v2025.03 le 12/11/2026.
+        Compatibilité éditeur : Windows 11 23H2 et 24H2.
+    CHG0004720:
+      titre: Déploiement de Vellane Ventes 7.4
+      contenu: Déploiement obligatoire sur GG_Deploy_VentesV7 du 26/11 au 04/12. Arrêt de l'API 7.3 le 07/12.
+
+contacts:
+  Poste-Travail:
+    - si: [{ indice: notes_socle }]
+      reponse: >
+        Exact, le socle 2026.09 n'embarque plus les runtimes 2005 et 2008. Le
+        paquet APP-VCREDIST2008-X86 est au catalogue pour servir de dépendance.
+        On met à jour la fiche de packaging de Vellane Ventes et on vérifie les
+        autres applications qui pourraient en dépendre.
+      revele: [socle_confirme]
+    - reponse: Le socle 2026.09 est validé et déployé sur les postes neufs depuis octobre. Vous avez une erreur précise ?
+
+indices:
+  codes_deploiement:
+    description: "DEP-2026-118 : 38 réussites, 21 échecs 0x643 (1603), 2 échecs 0x87D00607 (contenu)."
+    categorie: diagnostic
+    points: 3
+    revele_par:
+      - { action: deploiement.lire, cible: DEP-2026-118 }
+  log_msi_1904:
+    description: Le journal MSI montre l'échec de l'action CA_RegisterReportEngine (erreur 1904, inscription de VVReport.dll, HRESULT 0x800736B1) puis l'annulation (1603).
+    categorie: diagnostic
+    points: 6
+    revele_par:
+      - { action: machine.fichiers.lire, cible: PC-LYO-0151, parametres: { chemin: 'C:\Windows\Temp\VellaneVentes74_install.log' } }
+      - { evenement: msi_1904 }
+  sxs_vc90:
+    description: "SideBySide 33 : l'assembly dépendant Microsoft.VC90.CRT 9.0.30729.6161 (x86) est introuvable pour VVReport.dll."
+    categorie: diagnostic
+    points: 7
+    revele_par:
+      - { evenement: sxs_vc90 }
+  vc2008_absent:
+    description: Visual C++ 2008 x86 est absent de PC-LYO-0151 (24H2) et présent sur PC-LYO-0121 (23H2), où l'installation a réussi.
+    categorie: diagnostic
+    points: 4
+    revele_par:
+      - { action: machine.logiciels.lire, cible: PC-LYO-0151 }
+  notes_socle:
+    description: Les notes de version du socle 2026.09 annoncent le retrait de Visual C++ 2005 et 2008.
+    categorie: diagnostic
+    points: 5
+    revele_par:
+      - { action: document.consulter, cible: NV-SOCLE-2026.09 }
+  socle_confirme:
+    description: L'équipe poste de travail confirme et propose la dépendance APP-VCREDIST2008-X86.
+    categorie: diagnostic
+    points: 0
+    revele_par:
+      - { contact: Poste-Travail, si: [{ indice: notes_socle }] }
+  echecs_egal_socle:
+    description: Regroupés par socle, les 23 échecs sont exactement les 23 postes W11-24H2-v2026.09 ; les 38 réussites sont en 23H2.
+    categorie: correlation
+    points: 8
+    revele_par:
+      - { action: deploiement.lire, cible: DEP-2026-118, parametres: { regroupement: socle } }
+  lien_tickets:
+    description: L'alerte et les trois tickets relèvent du même déploiement.
+    categorie: correlation
+    points: 4
+    revele_par:
+      - { action: ticket.lier, parametres: { tickets: { inclut: [ALR-7790, INC0032301, INC0032305, INC0032307] } } }
+  vpn_secondaire:
+    description: Les deux échecs de contenu sont des portables 24H2 en VPN ; ils échoueront en 1603 une fois le contenu téléchargé.
+    categorie: correlation
+    points: 3
+    revele_par:
+      - { question: localisation, ticket: INC0032305 }
+  contenu_ok:
+    description: Sur les 21 postes en 1603, le contenu a été téléchargé et son hachage vérifié ; ni le paquet ni la distribution ne sont en cause.
+    categorie: elimination
+    points: 3
+    revele_par:
+      - { action: machine.fichiers.lire, cible: PC-LYO-0151, parametres: { chemin: 'C:\Windows\AgentDeploiement\Logs\Installation.log' } }
+  antivirus_hors_sujet:
+    description: La détection antivirus de 01:50 vise un script sur une clé USB, sans lien avec VVReport.dll ; aucun autre poste en échec n'a de détection.
+    categorie: elimination
+    points: 3
+    revele_par:
+      - { evenement: antivirus_usb }
+  contexte_systeme:
+    description: L'installation tourne en contexte Système ; les droits des utilisateurs n'y sont pour rien.
+    categorie: elimination
+    points: 2
+    revele_par:
+      - { action: deploiement.application.lire, cible: APP-VENTES-74 }
+      - { action: machine.fichiers.lire, cible: PC-LYO-0151, parametres: { chemin: 'C:\Windows\AgentDeploiement\Logs\Installation.log' } }
+  compatibilite_24h2:
+    description: L'éditeur interne déclare l'application compatible 24H2 ; ce n'est pas Windows qui bloque mais un prérequis non déclaré.
+    categorie: elimination
+    points: 2
+    revele_par:
+      - { action: document.consulter, cible: PKG-VENTES-74 }
+
+fausses_pistes:
+  distribution_du_contenu:
+    description: Deux postes en 0x87D00607 (contenu introuvable).
+    pourquoi_credible: Un contenu corrompu ou mal distribué fait échouer un déploiement.
+    eliminee_par: [contenu_ok]
+    actions_inutiles:
+      - { action: deploiement.contenu.redistribuer, si: [{ indice: log_msi_1904, revele: false }] }
+    penalite: -10
+  antivirus:
+    description: Une détection antivirus sur PC-LYO-0151 vingt minutes avant l'installation.
+    pourquoi_credible: Les antivirus bloquent souvent les DLL des installations.
+    eliminee_par: [antivirus_hors_sujet]
+    actions_inutiles: []
+    penalite: 0
+  droits_utilisateurs:
+    description: Les commerciaux ne sont pas administrateurs de leur poste.
+    pourquoi_credible: Le message du Centre logiciel est vague.
+    eliminee_par: [contexte_systeme]
+    actions_inutiles: []
+    penalite: 0
+  windows_24h2:
+    description: Vellane Ventes ne serait pas compatible avec Windows 11 24H2.
+    pourquoi_credible: Les échecs touchent tous des postes 24H2.
+    eliminee_par: [compatibilite_24h2]
+    actions_inutiles: []
+    penalite: 0
+
+pieges:
+  relance_sans_correction:
+    description: Relancer le déploiement sur les postes en échec ou sur toute la cible avant d'avoir ajouté la dépendance.
+    declencheur:
+      action: deploiement.relancer
+      cible: DEP-2026-118
+      parametres: { portee: [echecs, tous] }
+      si: [{ chemin: deploiement.applications.APP-VENTES-74.dependances, ne_contient_pas: APP-VCREDIST2008-X86 }]
+    penalite: -10
+    retour: Les 23 postes échoueront de nouveau, la nuit prochaine ou tout de suite ; une relance n'est utile qu'après la correction.
+  generalisation_sans_pilote:
+    description: Relancer sur tous les postes en échec sans avoir validé la correction sur un poste pilote.
+    declencheur:
+      action: deploiement.relancer
+      cible: DEP-2026-118
+      parametres: { portee: [echecs, tous] }
+      si:
+        - { chemin: deploiement.applications.APP-VENTES-74.dependances, contient: APP-VCREDIST2008-X86 }
+        - { etape: test_pilote, validee: false }
+    penalite: -10
+    retour: Un poste pilote du groupe en échec suffit à prouver la correction avant de toucher 23 postes.
+  installations_manuelles:
+    description: Installer à la main Visual C++ 2008 sur plus de trois postes.
+    declencheur:
+      action: machine.logiciel.installer
+      parametres: { produit: { contient: Visual C++ 2008 } }
+      occurrence: 4
+    penalite: -10
+    retour: Une installation à la main sur un poste valide l'hypothèse ; au-delà, elle échappe au suivi du déploiement et à la détection des dépendances.
+
+actions_dangereuses:
+  runtime_partout:
+    description: Déployer Visual C++ 2008 seul sur tout le parc ou sur une cible plus large que les postes de l'application.
+    declencheur: { action: deploiement.creer, cible: APP-VCREDIST2008-X86 }
+    penalite: -40
+    gravite: majeure
+    retour: Le socle a retiré ce runtime en fin de support pour raison de sécurité ; il ne doit revenir que là où une application l'exige, en dépendance.
+  desinstallation:
+    description: Déployer la désinstallation de Vellane Ventes (7.3 ou 7.4).
+    declencheur: { action: deploiement.desinstaller }
+    penalite: -45
+    gravite: critique
+    retour: Les commerciaux perdraient l'application qui fonctionne, à quatre jours de l'échéance.
+  antivirus_desactive:
+    description: Désactiver l'antivirus sur des postes pour laisser passer l'installation.
+    declencheur: { action: machine.antivirus.desactiver }
+    penalite: -40
+    gravite: majeure
+    retour: Aucun indice ne met l'antivirus en cause, et une détection réelle a eu lieu sur PC-LYO-0151.
+  admin_local:
+    description: Donner les droits d'administrateur local aux commerciaux.
+    declencheur: { action: machine.admin_local.ajouter }
+    penalite: -40
+    gravite: majeure
+    retour: L'installation tourne en Système ; les droits des utilisateurs n'y changent rien et créent un risque permanent.
+  master_modifie:
+    description: Modifier le master du socle pour y remettre les runtimes.
+    declencheur: { action: socle.image.modifier }
+    penalite: -40
+    gravite: majeure
+    retour: Le socle appartient à l'équipe poste de travail, qui a retiré ces runtimes volontairement ; on lui transmet le besoin.
+  dll_copiee:
+    description: Copier msvcr90.dll à la main dans System32 ou dans le dossier de l'application.
+    declencheur:
+      action: machine.fichiers.modifier
+      parametres: { chemin: { contient: msvcr90.dll } }
+    penalite: -40
+    gravite: majeure
+    retour: Les runtimes Visual C++ 2005/2008 se chargent par le magasin side-by-side (WinSxS) ; une DLL copiée à la main n'est ni mise à jour ni détectée, et le manifeste échoue quand même.
+
+resolution:
+  conditions:
+    - { chemin: deploiement.applications.APP-VENTES-74.dependances, contient: APP-VCREDIST2008-X86 }
+    - { chemin: deploiement.deploiements.DEP-2026-118.etat_par_poste.PC-LYO-0151, egal: succes }
+    - { chemin: deploiement.applications.APP-VENTES-73.existe, different: false }
+  etapes:
+    dependance_ajoutee:
+      description: APP-VCREDIST2008-X86 ajoutée en dépendance du type de déploiement de Vellane Ventes 7.4.
+      points: 8
+      valide_par:
+        - si: [{ chemin: deploiement.applications.APP-VENTES-74.dependances, contient: APP-VCREDIST2008-X86 }]
+    test_pilote:
+      description: Relance sur un poste pilote du groupe en échec (PC-LYO-0151), réussite constatée.
+      points: 6
+      valide_par:
+        - action: deploiement.relancer
+          cible: DEP-2026-118
+          parametres: { portee: poste }
+          si: [{ chemin: deploiement.applications.APP-VENTES-74.dependances, contient: APP-VCREDIST2008-X86 }]
+    relance_des_echecs:
+      description: Relance sur les postes en échec après le pilote réussi.
+      points: 6
+      valide_par:
+        - action: deploiement.relancer
+          cible: DEP-2026-118
+          parametres: { portee: echecs }
+          apres: { etape: test_pilote, delai: 0s }
+    equipe_poste_informee:
+      description: Équipe poste de travail informée (fiche de packaging, autres applications dépendant des runtimes retirés).
+      points: 5
+      valide_par:
+        - { action: equipe.contacter, cible: Poste-Travail, si: [{ indice: sxs_vc90 }] }
+
+communication:
+  cloture:
+    ticket: ALR-7790
+    elements:
+      cause:
+        description: Cause (Visual C++ 2008 x86 retiré du socle 24H2, non déclaré en dépendance).
+        mots_cles: [Visual C++ 2008, VC90, prérequis, 24H2, socle]
+        points: 4
+      action:
+        description: Action (dépendance ajoutée, pilote validé, relance des échecs).
+        mots_cles: [dépendance, pilote, relanc]
+        points: 4
+      suivi:
+        description: Suivi (fiche de packaging, autres applications, postes en VPN à traiter au retour sur site).
+        mots_cles: [packaging, Poste-Travail, autres applications, VPN]
+        points: 3
+  actions:
+    information_commerciaux:
+      description: Message aux commerciaux et à la direction de Lyon (installation cette nuit, garder la 7.3 d'ici là, se connecter sur site ou au VPN la nuit).
+      points: 4
+      valide_par:
+        - { action: ticket.communiquer, parametres: { population: [GG_Commerciaux, GG_Deploy_VentesV7, commerciaux] } }
+
+escalade:
+  equipes: [N3-Infrastructure, Poste-Travail]
+  delai_cible: 15m
+  indices_attendus:
+    N1: [lien_tickets, sxs_vc90, vc2008_absent, vpn_secondaire]
+    N2: [lien_tickets, sxs_vc90, vc2008_absent, vpn_secondaire, codes_deploiement, log_msi_1904, notes_socle, echecs_egal_socle, contenu_ok]
+  note:
+    elements:
+      perimetre:
+        description: Ampleur (23 postes sur 61, échéance).
+        mots_cles: [23, 61, 37 %, commerciaux]
+        points: 6
+      code:
+        description: Codes relevés.
+        mots_cles: [1603, 0x643, 1904, 0x800736B1]
+        points: 6
+      prerequis:
+        description: Prérequis manquant nommé.
+        mots_cles: [VC90, Visual C++ 2008, SideBySide, 33]
+        points: 8
+      socle:
+        description: Les échecs correspondent au nouveau socle.
+        mots_cles: [24H2, nouveau socle, 2026.09]
+        points: 6
+      echeance:
+        description: Échéance (vendredi 04/12, arrêt de la 7.3 le 07/12).
+        mots_cles: [vendredi, 04/12, 4 décembre, 7.3, lundi]
+        points: 4
+
+debrief:
+  - Le code 1603 dit seulement « échec fatal » ; le journal MSI verbeux et les événements voisins (11904, SideBySide 33) donnent la cause.
+  - Comparer les postes en échec et en réussite par population (socle, modèle, site) révèle la variable commune.
+  - Deux codes d'erreur différents dans un même déploiement peuvent cacher une seule cause pour la même population.
+  - Un prérequis se déclare en dépendance, ciblée ; il ne se pousse pas sur tout le parc.
+  - Valider sur un poste pilote avant de relancer en masse.
+  - Le socle appartient à son équipe : on lui transmet le besoin, on ne modifie pas le master.

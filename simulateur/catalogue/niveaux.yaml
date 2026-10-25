@@ -1,0 +1,121 @@
+# Niveaux de difficulté : outils accessibles, temps cible, barème, pénalités
+# et règles d'escalade. Les scénarios s'y réfèrent par leur champ `niveau`.
+#
+# Les outils réellement accessibles sont ceux du PARCOURS de l'apprenant
+# (un apprenant N1 garde ses outils N1 face à un ticket N2) : c'est ce qui
+# rend l'escalade nécessaire. Le détail action par action est dans
+# catalogue/actions.yaml (champ `niveau`).
+
+schema: niveaux/1
+
+niveaux:
+  N1:
+    libelle: Support de proximité
+    description: >
+      Actions simples sur un compte ou un poste : outils graphiques
+      (Utilisateurs et ordinateurs AD, Gestion de l'ordinateur, Services,
+      Observateur d'événements du poste, Explorateur) et cmdlets de base.
+      Gestion des files d'attente du serveur d'impression. Aucune
+      administration des serveurs ni des contrôleurs de domaine.
+    outils:
+      - Utilisateurs et ordinateurs Active Directory (comptes, groupes)
+      - Gestion de l'ordinateur et Services (postes)
+      - Observateur d'événements (postes uniquement)
+      - Gestion de l'impression (files d'attente du serveur d'impression)
+      - Base de connaissances, calendrier des changements
+      - "Cmdlets : Get-ADUser, Search-ADAccount, Unlock-ADAccount, Set-ADAccountPassword, Get-ADGroupMember, Add-ADGroupMember, Get-ADPrincipalGroupMembership, Get-ADUserResultantPasswordPolicy, Get-Service, Restart-Service, Get-ChildItem, Remove-Item, Get-Volume, Get-WinEvent (poste), Get-PrintJob"
+      - "Commandes : ipconfig, ping, net use, gpupdate, whoami"
+    temps_cible: { min: 5m, max: 15m }
+    bareme:
+      diagnostic: 30
+      resolution: 40
+      communication: 15
+      temps: 15
+    penalites:
+      piege: { min: -5, max: -15 }
+      action_dangereuse: { min: -15, max: -30 }
+
+  N2:
+    libelle: Support systèmes
+    description: >
+      Diagnostic sur plusieurs éléments (poste, AD, réseau) : lecture des
+      journaux des contrôleurs de domaine et des serveurs, DNS, DHCP,
+      stratégies de groupe, canal sécurisé, synchronisation horaire.
+      Modifications limitées aux objets (comptes ordinateurs, enregistrements
+      DNS, baux et options DHCP, filtrage de GPO). Lecture seule sur la
+      réplication et les approbations.
+    outils:
+      - Tous les outils N1
+      - Observateur d'événements des serveurs et des contrôleurs de domaine
+      - Console de gestion des stratégies de groupe, gpresult
+      - Consoles DNS et DHCP
+      - Console de déploiement (lecture, relance sur un poste)
+      - "Commandes : nltest, Test-ComputerSecureChannel, Resolve-DnsName, nslookup, w32tm /query, klist, gpresult /r, Test-NetConnection, repadmin /replsummary et /showrepl, dcdiag, Get-ADReplicationFailure, Get-DhcpServerv4Scope, Get-DnsServerResourceRecord, Get-ADTrust"
+    temps_cible: { min: 15m, max: 35m }
+    bareme:
+      diagnostic: 30
+      elimination: 15
+      resolution: 30
+      communication: 15
+      temps: 10
+    penalites:
+      piege: { min: -5, max: -20 }
+      action_dangereuse: { min: -25, max: -50 }
+
+  N3:
+    libelle: Infrastructure
+    description: >
+      Incidents d'infrastructure touchant plusieurs utilisateurs ou un service
+      entier : réplication, rôles FSMO, approbations, PKI, déploiement.
+      Toutes les actions sont possibles, y compris les plus risquées : c'est
+      l'objet de l'évaluation (corrélation avant action).
+    outils:
+      - Tous les outils N2
+      - "Réplication : repadmin /syncall, /replicate, ntdsutil"
+      - Domaines et approbations Active Directory, netdom trust
+      - Autorité de certification, IIS, certlm
+      - Console de virtualisation (lecture, démarrage, instantanés)
+      - Console de déploiement (dépendances, ciblage)
+    temps_cible: { min: 30m, max: 60m }
+    bareme:
+      diagnostic: 25
+      correlation: 15
+      elimination: 10
+      resolution: 25
+      communication: 15
+      temps: 10
+    penalites:
+      piege: { min: -10, max: -25 }
+      action_dangereuse: { min: -40, max: -80 }
+
+# Points de temps : maximum jusqu'au temps cible, puis décroissance linéaire
+# jusqu'à zéro au double du temps cible. Le chronomètre s'arrête à la
+# clôture ou à l'escalade du ticket.
+temps:
+  plein_jusqu_a: 1.0     # x temps cible
+  zero_a: 2.0            # x temps cible
+
+# Escalade
+#
+# - Scénario d'un niveau SUPÉRIEUR au parcours : l'escalade est attendue.
+#   Le scénario est alors noté sur le barème `escalade` ci-dessous ; le
+#   diagnostic préliminaire porte sur les indices accessibles avec les
+#   outils du parcours (liste `indices_attendus` du scénario).
+# - Scénario du MÊME niveau que le parcours : l'escalade est injustifiée
+#   (pénalité), sauf mention contraire du scénario.
+# - Un « contact » (demande d'information ou d'action à une autre équipe en
+#   gardant le ticket) n'est pas une escalade.
+escalade:
+  bareme:
+    diagnostic_preliminaire: 30   # réparti sur les indices attendus
+    decision: 30                  # escalader, vers la bonne équipe
+    note_transmission: 30         # éléments de la note (voir le scénario)
+    temps: 10                     # par rapport à `escalade.delai_cible`
+  equipe_incorrecte: -10          # escalade vers une équipe qui ne traite pas le sujet
+  injustifiee: -20                # cas du niveau du parcours
+  tardive: -5                     # escalade après une action corrective ratée
+  # Une action dangereuse reste pénalisée en plus, quel que soit le parcours.
+
+# Une action dangereuse marquée `fin_scenario: true` arrête le scénario :
+# la note est plafonnée à `plafond_fin_scenario`, après pénalités.
+plafond_fin_scenario: 20
